@@ -91,7 +91,7 @@ class MEMM():
 #                             for feature_index in feature_vec_indices:
 #                                 likelihood += args[0][feature_index]*self.words_feature_vectors[word_index][feature_index]
                             likelihood += np.inner(args[0], self.words_feature_vectors[word_index])
-                            # calculate the inner sum of the second term
+                            # expected counts
                             expected_count = 0
                             #TODO with hagar: change to the tags it is actually appearing with for the morphological and the (word,tag) sets
 #                             for tag in self.seen_tags_set: 
