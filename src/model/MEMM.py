@@ -36,7 +36,9 @@ class MEMM():
         self.morphological_set_lambda = 1
         self.contextual_set_lambda = 1
         self.word_tag_set_lambda = 1
-        
+        self.basic_setup = "word_tag"
+        self.medium_setup = "morphological"
+        self.advanced_setup = "contextual"
         
     def read_input_sentences_and_tags(self):
         temp_word_tag_dict = {}
@@ -76,52 +78,52 @@ class MEMM():
                 t1 = time.clock()
                 features_functions = features.feature_functions(self.num_of_feature_functions)
                 likelihood = 0
+                v= args[0]
                 feature_vec_indices = []
                 all_tags_feature_vec_indices = []
                 for sentence in self.sentences_list:
                     for word_index in range(0,sentence.length):                    
                         try:
-                            #TODO: with hagar # replace this with specific indices multiplication
-                            if setup == "morphological":
-                                self.v_morphological_contextual_set = np.zeros(features_functions.get_num_of_morphological_features())
-                                feature_vec_indices = features_functions.get_morphological_feature_vec_indices(sentence.get_tag(word_index-2),sentence.get_tag(word_index-1),sentence.get_tag(word_index),sentence.get_word(word_index))
-                            elif setup == "word_tag":
+                            if setup == self.basic_setup: #word-tag
                                 self.v_word_tag_set = np.zeros(features_functions.get_num_of_word_tag_features())
                                 feature_vec_indices = features_functions.get_word_tag_feature_vec_indices(sentence.get_tag(word_index-2),sentence.get_tag(word_index-1),sentence.get_tag(word_index),sentence.get_word(word_index))
-                            elif setup == "contextual":
+                            elif setup == self.medium_setup: #morpho':
+                                self.v_morphological_contextual_set = np.zeros(features_functions.get_num_of_morphological_features())
+                                feature_vec_indices = features_functions.get_morphological_feature_vec_indices(sentence.get_tag(word_index-2),sentence.get_tag(word_index-1),sentence.get_tag(word_index),sentence.get_word(word_index))
+                            elif setup == self.advanced_setup:#contextual:
                                 self.v_contextual_set = np.zeros(features_functions.get_num_of_cotextual_features())
                                 feature_vec_indices = features_functions.get_contextual_feature_vec_indices(sentence.get_tag(word_index-2),sentence.get_tag(word_index-1),sentence.get_tag(word_index),sentence.get_word(word_index))
                             
                             for feature_index in feature_vec_indices:
-                                likelihood += args[0][feature_index]*self.words_feature_vectors[word_index][feature_index]
+                                likelihood += v[feature_index]*1
 #                             likelihood += np.inner(args[0], self.words_feature_vectors[word_index])
                             # expected counts
                             expected_counts = 0
-                            if setup == "morphological":
-                                # go over only the tag it is appearing with
-                                relevant_set_of_tags = self.frequent_word_tag_pairs_dict[sentence.get_word[word_index]]
-                                for relevant_tag in relevant_set_of_tags:
-                                    all_tags_feature_vec_indices.extend(features_functions.get_morphological_feature_vec_indices(sentence.get_tag(word_index-2),sentence.get_tag(word_index-1),relevant_tag,sentence.get_word(word_index)))
-                            elif setup == "word_tag":
+                            if setup == self.basic_setup:#word-tag
                                 relevant_set_of_tags = self.frequent_word_tag_pairs_dict[sentence.get_word[word_index]]
                                 for relevant_tag in relevant_set_of_tags:
                                     all_tags_feature_vec_indices.extend(features_functions.get_word_tag_feature_vec_indices(sentence.get_tag(word_index-2),sentence.get_tag(word_index-1),relevant_tag,sentence.get_word(word_index)))
-                            elif setup == "contextual":
+                            elif setup == self.medium_setup:#morpho'
+                                # go over only the tag it is appearing with
+                                relevant_set_of_tags = self.frequent_word_tag_pairs_dict[sentence.get_word[word_index]]
+                                for relevant_tag in relevant_set_of_tags:
+                                    all_tags_feature_vec_indices.extend(features_functions.get_morphological_feature_vec_indices(sentence.get_tag(word_index-2),sentence.get_tag(word_index-1),relevant_tag,sentence.get_word(word_index)))                            
+                            elif setup == self.advanced_setup: #contextual:
                                 for tag in self.seen_tags_set:
                                     all_tags_feature_vec_indices.extend(features_functions.get_contextual_feature_vec_indices(sentence.get_tag(word_index-2),sentence.get_tag(word_index-1),tag,sentence.get_word(word_index)))
                             #sum up the addition to expected_counts 
                             for feature_index in all_tags_feature_vec_indices: 
-                                expected_counts += args[0][feature_index]*self.words_feature_vectors[word_index][feature_index]
+                                expected_counts += v[feature_index]*1
                             #subtract from the total likelihood
                             likelihood -= math.log(expected_counts)
                         except Exception as err: 
                             sys.stderr.write("problem calculating likelihood_func")     
                             print err.args      
                             print err
-                v_vector_square = sum(math.pow(v_k, 2) for v_k in args[0])
-                likelihood -= ((self.regularization_lambda / 2) * v_vector_square)
+                v_square = sum(math.pow(v_k, 2) for v_k in v)
+                likelihood -= ((self.regularization_lambda / 2) * v_square)
                 t2 = time.clock()
-                print "    v-norm:", v_vector_square
+                print "    v-norm:", v_square
                 print "    time to calc L:" , t2 - t1
             except Exception as err: 
                 sys.stderr.write("problem likelihood_func")     
@@ -134,29 +136,63 @@ class MEMM():
         def gradient_likelihood(*args):
             print "computing gradientL"
             t1 = time.clock()
+            v = args[0]
             try:
                 features_functions = features.feature_functions(self.num_of_feature_functions)
                 all_tags_feature_vec = {} #temp dict for the feature vec result across all POS tags
-                likelihood_derivative = [0] * self.num_of_feature_functions
+                curr_relevant_set_of_tags = []
+                
+                if setup is self.basic_setup:
+                    likelihood_derivative = [0] * features_functions.get_num_of_word_tag_features()
+                elif setup is self.medium_setup:
+                    likelihood_derivative = [0] * features_functions.get_num_of_morphological_features()                
+                elif setup is self.advanced_setup:
+                    likelihood_derivative = [0] * features_functions.get_num_of_contextual_features()
+     
                 for sentence in self.sentences_list:
                     for word_index in range(0,sentence.length):                   
                         #calc the probabilities first
-                        prob = [0] * len(self.seen_tags_set)
-                        for seen_tag in range(0,len(self.seen_tags_set)):
-                            all_tags_feature_vec[self.seen_tags_set[seen_tag]] = features_functions.apply_feature_functions(sentence.get_tag(word_index-2),sentence.get_tag(word_index-1),seen_tag,sentence.get_word(word_index))
-                            inner_product = sum(np.inner(all_tags_feature_vec[self.seen_tags_set[seen_tag]], args))
-                            prob[seen_tag] = math.exp(inner_product)
+                        if setup is self.basic_setup:
+                            relevant_set_of_tags = self.frequent_word_tag_pairs_dict[sentence.get_word[word_index]]
+                            curr_relevant_set_of_tags = relevant_set_of_tags
+                            prob = [0] * len(relevant_set_of_tags)
+                            inner_product = 0
+                            all_tag_feature_vec_indices = {} #key is a tag, value is a list of feature indices "on"
+                            for relevant_tag in relevant_set_of_tags:
+                                all_tag_feature_vec_indices[relevant_tag] = features_functions.get_word_tag_feature_vec_indices(sentence.get_tag(word_index-2),sentence.get_tag(word_index-1),relevant_tag,sentence.get_word(word_index))
+                                for feature_index in all_tag_feature_vec_indices[relevant_tag]:                                                  
+                                    inner_product += v[feature_index]*1
+                                prob[relevant_tag] += math.exp(inner_product)
+                        elif setup is self.medium_setup :
+                            relevant_set_of_tags = self.frequent_word_tag_pairs_dict[sentence.get_word[word_index]]
+                            curr_relevant_set_of_tags = relevant_set_of_tags
+                            prob = [0] * len(relevant_set_of_tags)
+                            for relevant_tag in relevant_set_of_tags:
+                                all_tag_feature_vec_indices[relevant_tag] = features_functions.get_morphological_feature_vec_indices(sentence.get_tag(word_index-2),sentence.get_tag(word_index-1),relevant_tag,sentence.get_word(word_index))
+                                for feature_index in all_tag_feature_vec_indices[relevant_tag]:                                                  
+                                    inner_product += v[feature_index]*1
+                                prob[relevant_tag] += math.exp(inner_product)           
+                        elif setup is self.advanced_setup:
+                            prob = [0] * len(self.seen_tags_set)
+                            curr_relevant_set_of_tags = self.seen_tags_set
+                            for seen_tag in range(0,len(self.seen_tags_set)):
+                                all_tag_feature_vec_indices[seen_tag] = features_functions.get_contextual_feature_vec_indices(sentence.get_tag(word_index-2),sentence.get_tag(word_index-1),seen_tag,sentence.get_word(word_index))
+                                for feature_index in all_tag_feature_vec_indices[seen_tag]:                                                  
+                                        inner_product += v[feature_index]*1
+                                prob[seen_tag] = math.exp(inner_product)
                         normalization = sum(prob)
-                        for k in range(0,self.num_of_feature_functions):
+                        #go over all the features of the current setup
+                        for k in range(0,len(likelihood_derivative)):
                             # empirical counts 
-                            likelihood_derivative[k] += self.words_feature_vectors[word_index][k]
+                            if k in all_tag_feature_vec_indices[sentence.get_tag[word_index]] :
+                                likelihood_derivative[k] += 1
                             # expected counts
                             expected_count = 0
-                            for tag in self.seen_tags_set:
-                                f_k = all_tags_feature_vec[tag][k]
-                                expected_count +=  (f_k * prob[self.seen_tags_set.index(tag)]/normalization)
+                            for tag in curr_relevant_set_of_tags:
+                                f_k = all_tag_feature_vec_indices[tag][k]
+                                expected_count +=  (f_k * prob[curr_relevant_set_of_tags.index(tag)]/normalization)
                             likelihood_derivative[k] -= expected_count
-                            likelihood_derivative[k] -= (self.regularization_lambda*args[0][k])
+                            likelihood_derivative[k] -= (self.regularization_lambda*v[k])
                 max_likelihood_derivative = map(lambda x: -1 * x, likelihood_derivative) 
                 t2 = time.clock()
                 print "    time to calc gradient:" , t2 - t1
@@ -209,7 +245,7 @@ class MEMM():
            the output is the v_vector - weights for the features
         """
         self.read_input_sentences_and_tags()
-        self.compute_features_on_all_words()
+#         self.compute_features_on_all_words()
         self.optimize_v() 
         
                    
