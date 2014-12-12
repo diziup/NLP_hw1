@@ -68,18 +68,6 @@ class MEMM():
         #append the tag set to the member list
         for tag in seen_tags_set:
             self.seen_tags_set.append(tag)
-           
-    def read_input_sentences_for_test(self,input_file):
-        sentences_file = open(self.input_sentence_file,"rb").read().strip()
-        for i, line in enumerate(sentences_file.split('\n')):
-            if i > 5000 and i< 10001:   
-                self.sentences_dict[i] = line.split()
-                      
-    def read_input_POS_tags_for_test(self):
-        tags_file = open(self.input_tags_file,"rb").read().strip()
-        for i, line in enumerate(tags_file.split('\n')):
-            if i > 5001 and i< 10001:   
-                self.POS_tags_dict[i] = line.split()
                    
     def compute_Likelihood(self,setup):
         def likelihood_func(*args):
