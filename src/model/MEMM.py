@@ -11,7 +11,7 @@ import scipy
 import time
 import sentence
 import collections
-import features_hagar
+import features
 
 class MEMM():
     
@@ -253,7 +253,7 @@ class MEMM():
            the output is the v_vector - weights for the features
         """
         self.read_input_sentences_and_tags()
-        self.features_functions = features_hagar.feature_functions()
+        self.features_functions = features.feature_functions()
         self.compute_features_on_all_words()
         self.optimize_v() 
         
