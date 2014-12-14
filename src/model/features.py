@@ -38,11 +38,13 @@ class feature_functions():
             return 1
         else:
             return 0
+    
     def curr_prefix_starts_with_pre_func(self,tag,word):
         if word.startswith('pre') == True and tag=="NN":
             return 1
         else:
             return 0
+    
     def get_morphological_features_index(self,t,t_1,t_2,word):
         index = []
         i = 0
@@ -53,6 +55,7 @@ class feature_functions():
             index[i]=2
             i+=1
         return index
+    
     def get_num_of_morphological_features(self):
         return self.num_of_morphological_features
     
@@ -123,13 +126,16 @@ class feature_functions():
     def extract_word_tag_features(self,d):
         self.sorted_word_tag_freq = d
         self.num_of_word_tag_features = len(self.sorted_word_tag_freq)
+    
     def get_word_tag_features_index(self,t,t_1,t_2,word):
         index = []
         if self.sorted_word_tag_freq.has_key((word,t)):
             index.append(self.sorted_word_tag_freq[(word,t)])
         return index
+    
     def apply_word_tag_features(self,d):
         self.extract_word_tag_features(d)
+    
     def get_num_of_word_tag_features(self):
         return self.num_of_word_tag_features
 
