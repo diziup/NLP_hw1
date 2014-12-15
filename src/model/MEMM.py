@@ -23,7 +23,7 @@ class MEMM():
         self.input_tags_file = self.data_path+r"\sec2-21.pos" 
         self.seen_tags_set = []
         self.regularization_lambda = 0.5
-        self.num_of_sentences = 5000
+        self.num_of_sentences = 1000
         self.sentences_list = []
         self.words_feature_vectors = []
         self.word_tags_list_dict = {}  #key - word, value - list of tags the word got
@@ -52,24 +52,35 @@ class MEMM():
             self.sentences_list.append(s)
             #create the word-tag counts dict
             for index in range(0,len(words)):
-                if (words[index],tags[index]) in temp_word_tag_dict.keys():
-                    temp_word_tag_dict[words[index],tags[index]] += 1    
-                else:
-                    temp_word_tag_dict[words[index],tags[index]] = 1
-                seen_tags_set.add(tags[index])
+                try:
+                    if index == 0:
+                        if (words[index],tags[index],"*") in temp_word_tag_dict.keys():
+                            temp_word_tag_dict[words[index],tags[index],"*"] += 1
+                        else:
+                            temp_word_tag_dict[words[index],tags[index],"*"] = 1
+                    else:
+                        if (words[index],tags[index],tags[index-1]) in temp_word_tag_dict.keys():
+                            temp_word_tag_dict[words[index],tags[index],tags[index-1]] += 1
+                        else:
+                            temp_word_tag_dict[words[index],tags[index],tags[index-1]] = 1
+                    seen_tags_set.add(tags[index])
+                except Exception as err: 
+                    sys.stderr.write("problem")     
+                    print err.args      
+                    print err       
         #rank temp_word_tag_dict according to counts/take top k features
         temp_word_tag_dict_sorted = collections.OrderedDict(sorted(temp_word_tag_dict.items(), key= lambda x: (x[1]),reverse=True)) 
-        for ((word,tag),count) in temp_word_tag_dict_sorted.items():
+        for ((word,tag,tag_1),count) in temp_word_tag_dict_sorted.items():
             if word in self.word_tags_list_dict.keys():
-                    self.word_tags_list_dict[word].append(tag)
+                    self.word_tags_list_dict[word].append((tag,tag_1))
             else:
-                self.word_tags_list_dict[word] = [tag]
+                self.word_tags_list_dict[word] = [(tag,tag_1)]
             if count >= self.word_tag_threshold:
                 self.word_tag_threshold_counter += 1
                 if word in self.frequent_word_tags_list_dict.keys():
-                    self.frequent_word_tags_list_dict[word].append(tag)
+                    self.frequent_word_tags_list_dict[word].append((tag,tag_1))
                 else:
-                    self.frequent_word_tags_list_dict[word] = [tag]
+                    self.frequent_word_tags_list_dict[word] = [(tag,tag_1)]
         print "self.word_tag_threshold_counter",self.word_tag_threshold_counter 
         #append the tag set to the member list
         for tag in seen_tags_set:
@@ -78,9 +89,9 @@ class MEMM():
                 
     def create_word_tag_pairs_above_threshold_dict(self):
         word_tag_pair_cnt = 0
-        for (word,tags_list) in self.frequent_word_tags_list_dict.items():
-            for tag in tags_list:
-                self.frequent_word_tag_pairs_dict[(word,tag)] = word_tag_pair_cnt 
+        for (word,pairs_tags_list) in self.frequent_word_tags_list_dict.items():
+            for tag,tag1 in pairs_tags_list:
+                self.frequent_word_tag_pairs_dict[(word,tag,tag1)] = word_tag_pair_cnt
                 word_tag_pair_cnt +=1
                    
     def compute_Likelihood(self):
@@ -97,11 +108,11 @@ class MEMM():
                         try:
                             #empirical count
                             if self.setup == self.basic_setup: #word-tag
-                                feature_vec_indices = self.features_functions.get_word_tag_features_index(sentence.get_tag(word_index+2),sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index))
+                                feature_vec_indices = self.features_functions.get_set1_features_index(sentence.get_tag(word_index+2),sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index))
                             elif self.setup == self.medium_setup: #morpho':
-                                feature_vec_indices = self.features_functions.get_morphological_features_index(sentence.get_tag(word_index+2),sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index))
+                                feature_vec_indices = self.features_functions.get_set2_feature_vec_indices(sentence.get_tag(word_index+2),sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index))
                             elif self.setup == self.advanced_setup:#contextual:
-                                feature_vec_indices = self.features_functions.get_contextual_feature_vec_indices(sentence.get_tag(word_index+2),sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index))
+                                feature_vec_indices = self.features_functions.get_set3_features(sentence.get_tag(word_index+2),sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index))
                             
                             if len(feature_vec_indices) > 0:
                                 for feature_index in feature_vec_indices:
@@ -225,9 +236,9 @@ class MEMM():
         try:
             t1 = time.clock()
             if self.setup == self.basic_setup:
-                self.features_functions.apply_word_tag_features(self.frequent_word_tag_pairs_dict)
-            elif self.setup == self.advanced_setup:
-                self.features_functions.apply_contextual_features()    
+                self.features_functions.apply_set1_features(self.frequent_word_tag_pairs_dict)
+            elif self.setup == self.medium_setup:
+                self.features_functions.apply_set2_features(self.frequent_word_tag_pairs_dict)
             self.num_of_feature_functions = self.features_functions.get_num_of_features(self.setup)
             t2 = time.clock()
             print "finished compute_features_on_all_words in", t2 - t1
