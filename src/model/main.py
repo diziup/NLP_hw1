@@ -9,10 +9,10 @@ import sys
 
 try:
     t_start = time.clock()
-    setup = "contextual_all"
-    num_of_sentences = 5000
-    reg_lambda = 1
-    threshold = 15
+    setup = "contextual_unigram"
+    num_of_sentences = 1
+    reg_lambda = 0.2
+    threshold = 0
     MEMM_model = MEMM.MEMM(setup, num_of_sentences, reg_lambda, threshold)
     MEMM_model.train_memm()
 #         MEMM_model.test_memm()

@@ -12,6 +12,8 @@ import sentence
 import collections
 import features
 import cPickle
+import operator
+
 
 class MEMM():
     
@@ -45,7 +47,7 @@ class MEMM():
         self.contextual_setup_bigram = "contextual_bigram"
         self.contextual_setup_trigram = "contextual_trigram"
         self.setup = setup
-        self.feature_functions = features.feature_functions(num_of_sentence,threshold)
+        self.feature_functions = features.feature_functions(setup,num_of_sentence,threshold)
         self.train_smoothing_setup = "train_smoothing_setup" #take the v result of the separate gram runs, and interpolate
         self.smoothing_lambda_unigram = 0.2
         self.smoothing_lambda_bigram = 0.5
@@ -89,16 +91,16 @@ class MEMM():
             for index in range(0,len(words)):
                 try:
                     if index == 0:
-                        if (words[index],tags[index],"*","*") in temp_word_tag_dict.keys():
-                            temp_word_tag_dict[words[index],tags[index],"*","*"] += 1
+                        if (s.words[index],s.POS_tags[index+2],"*","*") in temp_word_tag_dict.keys():
+                            temp_word_tag_dict[s.words[index],s.POS_tags[index+2],"*","*"] += 1
                         else:
-                            temp_word_tag_dict[words[index],tags[index],"*","*"] = 1
+                            temp_word_tag_dict[s.words[index],s.POS_tags[index+2],"*","*"] = 1
                     else:
-                        if (words[index],tags[index],tags[index-1],tags[index-2]) in temp_word_tag_dict.keys():
-                            temp_word_tag_dict[words[index],tags[index],tags[index-1],tags[index-2]] += 1
+                        if (s.words[index],s.POS_tags[index+2],s.POS_tags[index+1],s.POS_tags[index]) in temp_word_tag_dict.keys():
+                            temp_word_tag_dict[s.words[index],s.POS_tags[index+2],s.POS_tags[index+1],s.POS_tags[index]] += 1
                         else:
-                            temp_word_tag_dict[words[index],tags[index],tags[index-1],tags[index-2]] = 1
-                    seen_tags_set.add(tags[index])
+                            temp_word_tag_dict[s.words[index],s.POS_tags[index+2],s.POS_tags[index+1],s.POS_tags[index]] = 1
+                    seen_tags_set.add(s.POS_tags[index+2])
                 except Exception as err: 
                     sys.stderr.write("problem")     
                     print err.args      
@@ -107,10 +109,14 @@ class MEMM():
         print "finished reading input file, calculating tags frequency"
         self.temp_word_tag_dict_sorted = collections.OrderedDict(sorted(temp_word_tag_dict.items(), key= lambda x: (x[1]),reverse=True))
         for ((word,tag,tag_1,tag_2),count) in self.temp_word_tag_dict_sorted.items():
+            if word == "an":
+                print "here"
             if word in self.word_tags_list_dict.keys():
-                    self.word_tags_list_dict[word].append((tag,tag_1,tag_2))
+#                     self.word_tags_list_dict[word].append((tag,tag_1,tag_2))
+                    self.word_tags_list_dict[word].append(tag)
             else:
-                self.word_tags_list_dict[word] = [(tag,tag_1,tag_2)]
+#                 self.word_tags_list_dict[word] = [(tag,tag_1,tag_2)]
+                self.word_tags_list_dict[word] = [tag]
             if count >= self.word_tag_threshold:
                 self.word_tag_threshold_counter += 1
                 if word in self.frequent_word_tags_list_dict.keys():
@@ -142,38 +148,35 @@ class MEMM():
 #                 printing = int(self.num_of_sentences/5)
                 for sentence in self.train_sentences_list:                   
                     for word_index in range(0,sentence.length):                    
-                        feature_vec_indices = []
-                        all_tags_feature_vec_indices = []
+                        feature_vec_indices = []              
                         try:
                             #empirical count
-                            for func in self.get_indices_function_dict[self.setup]:
-                                feature_vec_indices.extend(func(sentence.get_tag(word_index+2),sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index)))
-                            if len(feature_vec_indices) > 0:
-                                for feature_index in feature_vec_indices:
-                                    likelihood += v[feature_index]*1
-                            #expected counts
-                            expected_counts = 0
-                            inner_product = 0
                             try:
-                                for tag in self.seen_tags_set:
-                                    for func in self.get_indices_function_dict[self.setup]:
-                                        all_tags_feature_vec_indices.extend(func(tag,sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index)))
-                                    if len(all_tags_feature_vec_indices) > 0:
-                                        for feature_index in all_tags_feature_vec_indices: 
-                                            inner_product += v[feature_index]*1
-                                    expected_counts += math.exp(inner_product)
+                                for func in self.get_indices_function_dict[self.setup]:
+                                    feature_vec_indices.extend(func(sentence.get_tag(word_index+2),sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index),self.setup))
+                                print feature_vec_indices
+                                for feature_ind in feature_vec_indices:
+                                    likelihood += v[feature_ind]*1
+                                #expected counts -  go over all possible tags
                             except Exception as err: 
-                                sys.stderr.write("problem with tag", tag)     
+                                sys.stderr.write("problem empirical count")     
                                 print err.args      
                                 print err
-                            #sum up the addition to expected_counts 
-#                             if len(all_tags_feature_vec_indices) > 0:
-#                                 for feature_index in all_tags_feature_vec_indices: 
-#                                     expected_counts += v[feature_index]*1
-#                             else: #no "on" feature- so the exponent will be 0 
-#                                 expected_counts += 0
-                                #subtract from the total likelihood
-#                             expected_counts = math.exp(expected_counts)
+                            try:
+                                expected_counts = 0
+                                
+                                for tag in self.seen_tags_set:
+                                    inner_product = 0
+                                    curr_tag_feature_vec_indices = []
+                                    for func in self.get_indices_function_dict[self.setup]:
+                                        curr_tag_feature_vec_indices.extend(func(tag,sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index),self.setup))
+                                    for feature_ind in curr_tag_feature_vec_indices: 
+                                        inner_product += v[feature_ind]*1
+                                    expected_counts += math.exp(inner_product)
+                            except Exception as err: 
+                                sys.stderr.write("problem expected counts with tag", tag)     
+                                print err.args      
+                                print err                                
                             likelihood -= math.log(expected_counts)
                         except Exception as err: 
                             sys.stderr.write("problem calculating likelihood_func")     
@@ -209,15 +212,14 @@ class MEMM():
                     for word_index in range(0,sentence.length):
                         all_tag_feature_vec_indices = {}                   
                         #calc the probability first - denominator in expected counts. go over all the tags in the data
-                        prob = {}
-                        inner_product = 0
-                        curr_relevant_set_of_tags = []
-                        curr_relevant_set_of_tags = self.word_tags_list_dict[sentence.get_word(word_index)][0]
+                        prob = {}                      
+                        curr_relevant_set_of_tags = self.word_tags_list_dict[sentence.get_word(word_index)]
                         try:
                             for tag in self.seen_tags_set:
+                                inner_product = 0
                                 curr_indices = []
                                 for func in self.get_indices_function_dict[self.setup]:
-                                    curr_indices.extend(func(sentence.get_tag(word_index+2),sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index)))
+                                    curr_indices.extend(func(tag,sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index),self.setup))
                                 all_tag_feature_vec_indices[tag] = curr_indices
                                 for feature_index in all_tag_feature_vec_indices[tag]:                                                  
                                     inner_product += v[feature_index]*1
@@ -273,8 +275,9 @@ class MEMM():
         try:
             t1 = time.clock()
             if "contextual" in self.setup: 
-                self.feature_functions.apply_word_tags_features(self.frequent_word_tags_list_dict)
-                self.num_of_feature_functions = self.feature_functions.num_of_word_tags_features
+#                 self.feature_functions.apply_word_tags_features(self.frequent_word_tags_list_dict)
+                self.feature_functions.apply_word_tags_features(self.frequent_word_tags_list_dict,self.train_sentences_list)
+                self.num_of_feature_functions = self.feature_functions.num_of_feature_func
             elif "morphological" in self.setup:
                 self.feature_functions.apply_set2_features(self.frequent_word_tag_pairs_dict)
             
@@ -285,7 +288,11 @@ class MEMM():
             print err.args      
             print err                  
     
-    def calc_viterbi_probabilities(self, sentence):
+    def compute_viterbi(self, sentence):
+        pi = {} # key (word_index,t_minus_1,t) ; value  the maximal prob 
+        bp = {} # key (word_index,t_minus_1,t) ; value  the tag that got maximal prob 
+        best_k_minus_1_tags = []
+        best_k_minus_2_tags = []
         for word_index in range(0,len(sentence)):
             #initialize the S_k - the possible tags a word can get
             tag_set_minus_1 = []
@@ -320,41 +327,59 @@ class MEMM():
                         for feature_index in feature_vec_indices:
                             prob_nominator += self.v_optimal[feature_index]
                         self.q[tag_minus_2][tag_minus_1][tag] = float(math.exp(prob_nominator)/prob_denominator)
-            #apply the recursion
+            #apply the recursion with beam search - reduce the runs on the possible\
+                #set of tags-  instead of T*T*T - to T*k*k
             #for the first word -  need to calculate all the |tags| options:
-            pi = {} # key (word_index,t_minus_1,t) ; value  the maximal prob 
-            bp = {} # key (word_index,t_minus_1,t) ; value  the tag that got maximal prob 
+           
             k_top_prob_tags = 5 #for the beam search -  replace the t_minus_2 and minus_1 with the top k
             
             pi[word_index] = {}
             bp[word_index] = {}
-            for tag in self.seen_tags_set:
+            if word_index == 0:
+                for tag in self.seen_tags_set: # as t_i
+                    pi[word_index][tag]={}
+                    bp[word_index][tag]={}
+                    pi[word_index]["*"][tag] = self.q["*"]["*"][tag]
+                    #finished calc the first word, take the top k results from it - sort according to q
+                sorted_curr_result = collections.OrderedDict(sorted(pi[word_index]["*"].items(), key= lambda x: (x[1]),reverse=True))
+                best_k_t_minus_1_options = sorted_curr_result[0:k_top_prob_tags]
+                best_k_minus_1_tags = best_k_t_minus_1_options.keys()
+                #get the max prob tag for word 1
+                max_tag, max_prob = self.find_max_prob_and_tag(pi[word_index]["*"])         
+            pi[word_index]["*"][tag] = max_prob
+            bp[word_index]["*"][tag] = max_tag
+            
+            for tag in self.seen_tags_set: # as t_i
                 pi[word_index][tag]={}
                 bp[word_index][tag]={}
                 if word_index == 0:
                     pi[word_index]["*"][tag] = self.q["*"]["*"][tag]
-            #finished calc the first word, take the top k results from it - sort according to q
-            for tag in pi[word_index]["*"].values():
-                 
-                 
+                    #finished calc the first word, take the top k results from it - sort according to q
+                    sorted_curr_result = collections.OrderedDict(sorted(pi[word_index]["*"].items(), key= lambda x: (x[1]),reverse=True))
+                    best_k_t_minus_1_options = sorted_curr_result[0:k_top_prob_tags]
+                    best_k_minus_1_tags = best_k_t_minus_1_options.keys()
+                #get the max prob tag for word 1
+                    max_tag, max_prob = self.find_max_prob_and_tag(pi[word_index]["*"])         
+            pi[word_index]["*"][tag] = max_prob
+            bp[word_index]["*"][tag] = max_tag
+#             for tag in self.seen_tags_set: # as t_i for the next word
+#                 if 
                 
-                       
             
-    def find_best_tag_sequence(self,sentence,word_index):
-        #go over the possible tags for t_i - 
-        pi = {}
-        bp = {}
-        pi[word_index] = {}
-        bp[word_index] = {}
-        
-        if word_index == 0: #first word -  need to go over only on t_i t options
-            for tag in self.seen_tags_set:
-                pi[word_index][tag]
-                                          
-    def compute_viterbi(self,sentence):
-        self.calc_viterbi_probabilities(sentence)
-#         self.find_best_tag_sequence(sentence)                 
-    
+            
+#                 elif word_index == 1: #second word, can go on the k top tags found from word 1 for t_minus_1   
+#                     for tag_minus_1 in best_k_minus_1_tags: 
+#                         pi[word_index][tag_minus_1][tag] =   
+                        
+                        
+                        
+                 
+                 
+    def find_max_prob_and_tag(self,pi_dict):
+        max_prob = max(pi_dict.iteritems(), key=operator.itemgetter(1))[1]
+        max_tag = [k for k,v in pi_dict.items() if v==max_prob]
+        return [max_prob, max_tag]    
+                                                                     
     def summarize(self):
         print "MODEL SUMMARY:"
         print   "\tnum sentences             =", self.num_of_sentences, \
