@@ -109,13 +109,10 @@ class MEMM():
         print "finished reading input file, calculating tags frequency"
         self.temp_word_tag_dict_sorted = collections.OrderedDict(sorted(temp_word_tag_dict.items(), key= lambda x: (x[1]),reverse=True))
         for ((word,tag,tag_1,tag_2),count) in self.temp_word_tag_dict_sorted.items():
-            if word == "an":
-                print "here"
             if word in self.word_tags_list_dict.keys():
-#                     self.word_tags_list_dict[word].append((tag,tag_1,tag_2))
+                if not tag in self.word_tags_list_dict[word]:
                     self.word_tags_list_dict[word].append(tag)
             else:
-#                 self.word_tags_list_dict[word] = [(tag,tag_1,tag_2)]
                 self.word_tags_list_dict[word] = [tag]
             if count >= self.word_tag_threshold:
                 self.word_tag_threshold_counter += 1
@@ -154,7 +151,7 @@ class MEMM():
                             try:
                                 for func in self.get_indices_function_dict[self.setup]:
                                     feature_vec_indices.extend(func(sentence.get_tag(word_index+2),sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index),self.setup))
-                                print feature_vec_indices
+#                                 print feature_vec_indices
                                 for feature_ind in feature_vec_indices:
                                     likelihood += v[feature_ind]*1
                                 #expected counts -  go over all possible tags
@@ -163,8 +160,7 @@ class MEMM():
                                 print err.args      
                                 print err
                             try:
-                                expected_counts = 0
-                                
+                                expected_counts = 0                   
                                 for tag in self.seen_tags_set:
                                     inner_product = 0
                                     curr_tag_feature_vec_indices = []
@@ -261,7 +257,7 @@ class MEMM():
             v_opt = fmin_l_bfgs_b(self.compute_Likelihood(), x0, self.compute_likelihood_gradient(), disp=True)
             self.v_optimal = v_opt[0]           
             print "v_optimal",self.v_optimal
-            with open("v_opt_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda), 'wb') as handle:
+            with open("v_opt_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_thredshold_"+str(self.word_tag_threshold), 'wb') as handle:
                 cPickle.dump(self.v_optimal, handle)
             handle.close()    
 #             cPickle.dump(self.v_optimal, "v_opt_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda),"wb")
@@ -291,8 +287,11 @@ class MEMM():
     def compute_viterbi(self, sentence):
         pi = {} # key (word_index,t_minus_1,t) ; value  the maximal prob 
         bp = {} # key (word_index,t_minus_1,t) ; value  the tag that got maximal prob 
-        best_k_minus_1_tags = []
-        best_k_minus_2_tags = []
+        top_k_minus_1_tags = []
+        top_k_minus_2_tags = []
+        n = len(sentence)
+        best_sentence_tags = [None] * n
+        
         for word_index in range(0,len(sentence)):
             #initialize the S_k - the possible tags a word can get
             tag_set_minus_1 = []
@@ -302,7 +301,7 @@ class MEMM():
                 tag_set_minus_1.append('*')
                 tag_set_minus_two.append('*')
             elif (word_index == 1):
-                tag_set_minus_1=self.seen_tags_set
+                tag_set_minus_1 = self.seen_tags_set
                 tag_set_minus_two.append('*')
             elif (word_index > 1):
                 tag_set_minus_1 = self.seen_tags_set
@@ -314,14 +313,22 @@ class MEMM():
                     self.q[tag_minus_2][tag_minus_1] = {}
                     prob_denominator = 0
                     # for t_i,t_i-1, t_i-2  - calc the normalization- the denominator for the prob
-                    for tag in self.seen_tags_set:
+                    #get the tags that the current word was seen from, if it were in the train
+                    if self.word_tags_list_dict.has_key(sentence.get_word[word_index]):
+                        curr_tag_tags_set = self.word_tags_list_dict[sentence.get_word[word_index]] 
+                    else:
+                        curr_tag_tags_set = self.seen_tags_set
+                    for tag in curr_tag_tags_set:
                         #according to the setup, get the indices of the "on" features for the current x.
-                        feature_vec_indices = self.features_functions.get_contextual_feature_vec_indices(tag,sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index))
-                        for feature_index in feature_vec_indices:
-                            prob_denominator += self.v_optimal[feature_index]
+                        feature_vec_indices = []
+                        for func in self.get_indices_function_dict[self.setup]:
+                            feature_vec_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
+#                         feature_vec_indices = self.features_functions.get_contextual_feature_vec_indices(tag,sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index))
+                        for feature_ind in feature_vec_indices:
+                            prob_denominator += self.v_optimal[feature_ind]
                     prob_denominator = math.exp(prob_denominator)
                     #final normalized prob
-                    for tag in self.seen_tags_set:
+                    for tag in curr_tag_tags_set:
                         prob_nominator = 0
                         feature_vec_indices = self.feature_functions.get_contextual_feature_vec_indices(tag,sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index))                        
                         for feature_index in feature_vec_indices:
@@ -330,51 +337,68 @@ class MEMM():
             #apply the recursion with beam search - reduce the runs on the possible\
                 #set of tags-  instead of T*T*T - to T*k*k
             #for the first word -  need to calculate all the |tags| options:
-           
-            k_top_prob_tags = 5 #for the beam search -  replace the t_minus_2 and minus_1 with the top k
-            
-            pi[word_index] = {}
+            k_top_prob_tags = 5 #for the beam search -  replace the t_minus_2 and minus_1 with the top k            
+            pi[word_index] = {} #pword index] [ti][t_minus_1]
             bp[word_index] = {}
+           
             if word_index == 0:
+                pi[word_index]["*"]={}
+                bp[word_index]["*"]={}
                 for tag in self.seen_tags_set: # as t_i
-                    pi[word_index][tag]={}
-                    bp[word_index][tag]={}
                     pi[word_index]["*"][tag] = self.q["*"]["*"][tag]
                     #finished calc the first word, take the top k results from it - sort according to q
                 sorted_curr_result = collections.OrderedDict(sorted(pi[word_index]["*"].items(), key= lambda x: (x[1]),reverse=True))
                 best_k_t_minus_1_options = sorted_curr_result[0:k_top_prob_tags]
-                best_k_minus_1_tags = best_k_t_minus_1_options.keys()
+                top_k_minus_1_tags = best_k_t_minus_1_options.keys()
                 #get the max prob tag for word 1
                 max_tag, max_prob = self.find_max_prob_and_tag(pi[word_index]["*"])         
-            pi[word_index]["*"][tag] = max_prob
-            bp[word_index]["*"][tag] = max_tag
+                pi[word_index]["*"][tag] = max_prob
+                bp[word_index]["*"][tag] = max_tag
             
-            for tag in self.seen_tags_set: # as t_i
-                pi[word_index][tag]={}
-                bp[word_index][tag]={}
-                if word_index == 0:
-                    pi[word_index]["*"][tag] = self.q["*"]["*"][tag]
-                    #finished calc the first word, take the top k results from it - sort according to q
-                    sorted_curr_result = collections.OrderedDict(sorted(pi[word_index]["*"].items(), key= lambda x: (x[1]),reverse=True))
-                    best_k_t_minus_1_options = sorted_curr_result[0:k_top_prob_tags]
-                    best_k_minus_1_tags = best_k_t_minus_1_options.keys()
-                #get the max prob tag for word 1
-                    max_tag, max_prob = self.find_max_prob_and_tag(pi[word_index]["*"])         
-            pi[word_index]["*"][tag] = max_prob
-            bp[word_index]["*"][tag] = max_tag
-#             for tag in self.seen_tags_set: # as t_i for the next word
-#                 if 
-                
+            elif word_index == 1: #second word, can go on the k top tags found from word 1 for t_minus_1               
+                for tag in self.seen_tags_set: # as t_i
+                    for tag_minus_1 in top_k_minus_1_tags:#t_minus_1 can go on the k top tags found from word 1  
+                        pi[word_index][tag_minus_1] = {}
+                        bp[word_index][tag_minus_1] = {}
+                        pi[word_index][tag_minus_1][tag] = self.q["*"][tag_minus_1][tag]
+                    sorted_curr_result = collections.OrderedDict(sorted(pi[word_index][tag_minus_1].items(), key= lambda x: (x[1]),reverse=True))
+                    top_k_minus_2_tags = sorted_curr_result[0:k_top_prob_tags]
+                    max_tag, max_prob = self.find_max_prob_and_tag(pi[word_index][tag_minus_1])         
+                    pi[word_index][tag_minus_1][tag] = max_prob
+                    bp[word_index][tag_minus_1][tag] = max_tag                       
+            else: #word 3 and above
+                for tag in self.seen_tags_set:
+                    for tag_minus_1 in top_k_minus_1_tags:
+                        pi[word_index][tag_minus_1] = {}
+                        bp[word_index][tag_minus_1] = {}   
+                        for tag_minus_2 in top_k_minus_2_tags:        
+                            pi[word_index][tag_minus_1][tag] = self.q[tag_minus_2][tag_minus_1][tag]
+                        max_tag, max_prob = self.find_max_prob_and_tag(pi[word_index][tag_minus_1])         
+                        pi[word_index][tag_minus_1][tag] = max_prob
+                        bp[word_index][tag_minus_1][tag] = max_tag
+                        sorted_curr_result = collections.OrderedDict(sorted(pi[word_index][tag_minus_1].items(), key= lambda x: (x[1]),reverse=True))
+                        top_k_curr_tags = sorted_curr_result[0:k_top_prob_tags]
+                top_k_minus_2_tags = top_k_minus_1_tags
+                top_k_minus_1_tags = top_k_curr_tags         
+        #finished calc the words, now find the best sequence - from the end to the beginning of the sentence
+        #need to find the best u,v from pi[n]
+        max_tn_prob = 0
+        best_tag_minus_1 = 0
+        best_tag = 0
+        for tag_minus_1 in pi[n].keys():
+            for tag in pi[n][tag_minus_1].keys():
+                if pi[n][tag_minus_1][tag] > max_tn_prob:
+                    max_tn_prob = pi[n][tag_minus_1][tag]
+                    best_tag_minus_1 = tag_minus_1
+                    best_tag = tag 
+        best_sentence_tags[n] = best_tag
+        best_sentence_tags[n-1] = (best_tag_minus_1)
+        #now calc the best sequence on the rest of the sentence - from k = (n-2),...,1:
+        for k in range(n-2,-1,-1):
+            best_sentence_tags[k] = bp[k+2][best_sentence_tags[k+1]][best_sentence_tags[k+2]]
             
-            
-#                 elif word_index == 1: #second word, can go on the k top tags found from word 1 for t_minus_1   
-#                     for tag_minus_1 in best_k_minus_1_tags: 
-#                         pi[word_index][tag_minus_1][tag] =   
-                        
-                        
-                        
-                 
-                 
+        return best_sentence_tags  
+              
     def find_max_prob_and_tag(self,pi_dict):
         max_prob = max(pi_dict.iteritems(), key=operator.itemgetter(1))[1]
         max_tag = [k for k,v in pi_dict.items() if v==max_prob]

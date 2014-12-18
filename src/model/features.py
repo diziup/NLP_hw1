@@ -4,8 +4,7 @@ Feature functions for the POS tagging task
 '''
 from collections import OrderedDict
 import sys
-import sentence
-
+import csv
 
 class feature_functions():
     feature_func_list = []
@@ -214,11 +213,12 @@ class feature_functions():
                             temp_word_tag_dict[sentece.words[index],sentece.POS_tags[index+2]] = 1
                     #seen_tags_set.add(tags[index])
                 except Exception as err:
-                    sys.stderr.write("problem")
+                    sys.stderr.write("problem in extract_contextual_unigram_tag_with_word")
                     print err.args
                     print err
         #rank temp_word_tag_dict according to counts/take top k features
         temp_word_1tag_dict_sorted = OrderedDict(sorted(temp_word_tag_dict.items(), key= lambda x: (x[1]),reverse=True))
+#         self.write_to_file(temp_word_1tag_dict_sorted)
         for ((word,tag),count) in temp_word_1tag_dict_sorted.items():
             if word in word_1tags_list_dict.keys():
                 word_1tags_list_dict[word].append(tag)
@@ -230,9 +230,14 @@ class feature_functions():
                     self.frequent_word_tags_1gram_dict[(word,tag)] +=1
                 else:
                     self.frequent_word_tags_1gram_dict[(word,tag)] = 1
-#         print "self.word_tag_threshold_counter",self.word_tag_threshold_counter
+        print "self.word_tag_threshold_counter",self.word_tag_threshold_counter
         self.num_of_word_tag_1gram_features = len(self.frequent_word_tags_1gram_dict)
         return self.num_of_word_tag_1gram_features
+    
+    def write_to_file(self,d): 
+        w = csv.writer(open("words_frequency.csv", "w"))
+        for key, val in d.items():
+            w.writerow([key, val])           
 
 #LIORA
 #     def extract_contextual_unigram_tag_with_word(self):
@@ -286,18 +291,19 @@ class feature_functions():
         self.extract_trigram_tag_with_word()
     
     def set_contextual_features_dict(self):
-        if self.setup == "contextual_unigram":
+        if self.setup == "contextual_unigram" or self.setup == "contextual_all":
             for i in range(0,len(self.frequent_word_tags_1gram_dict)):
                 new_key = self.frequent_word_tags_1gram_dict.keys()[i]
                 self.feature_tag_unigram[new_key] = i
-        elif self.setup == "contextual_bigram":
+        elif self.setup == "contextual_bigram" or self.setup == "contextual_all":
             for i in range(0,len(self.frequent_word_tags_2gram_dict)):
                 new_key = self.frequent_word_tags_2gram_dict.keys()[i]
                 self.feature_tag_bigram[tuple(new_key)]=i
-        elif self.setup == "contextual_trigram": 
+        elif self.setup == "contextual_trigram" or self.setup == "contextual_all": 
             for i in range(0,len(self.frequent_word_tags_3gram_dict)):
                 new_key = self.frequent_word_tags_3gram_dict.keys()[i]
                 self.feature_tag_trigram[tuple(new_key)]=i
+        
 #LIORA
 #     def extract_contextual_features_new(self):
 #         self.extract_contextual_unigram_tag_with_word()
