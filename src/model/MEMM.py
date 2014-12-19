@@ -292,10 +292,7 @@ class MEMM():
     
     def compute_viterbi(self, sentence):
         pi = {} #  value  the maximal prob 
-        pi_for_beam_search = {}
         bp = {} #  ; value  the tag that got maximal prob 
-        top_k_minus_1_tags = []
-        top_k_minus_2_tags = []
         n = sentence.length
         best_sentence_tags = [None] * n
         
@@ -342,63 +339,55 @@ class MEMM():
                     prob_denominator = sum(prob.values())
                     for tag in self.seen_tags_set:
                         self.q[tag_minus_2][tag_minus_1][tag] = float(prob[tag]/prob_denominator)
-            #apply the recursion with beam search - reduce the runs on the possible\
+            
+            try:#apply the recursion with beam search - reduce the runs on the possible\
                 #set of tags-  instead of T*T*T - to T*k*k
             #for the first word -  need to calculate all the |tags| options:
-            k_top_prob_tags = 5 #for the beam search -  replace the t_minus_2 and minus_1 with the top k            
-            pi[word_index] = {} #pword index] [ti][t_minus_1]
-            pi_for_beam_search[word_index] = {}
-            bp[word_index] = {}
-           
-            if word_index == 0: 
-                pi_for_beam_search[word_index]["*"] = {}
-                for tag in self.seen_tags_set: # as t_i
-                    pi[word_index][tag] = {}
-                    bp[word_index][tag]= {}
-                    pi[word_index][tag]["*"] = self.q["*"]["*"][tag]
-                    pi_for_beam_search[word_index]["*"][tag] = self.q["*"]["*"][tag]
-#                     max_prob, max_tag = self.find_max_prob_and_tag(pi[word_index]["*"])         
-#                     pi[word_index]["*"][tag] = max_prob
-#                     bp[word_index]["*"][tag] = max_tag
-                #finished calc the first word, take the top k results from it - sort according to q
-                sorted_curr_result = collections.OrderedDict(sorted(pi_for_beam_search[word_index]["*"].items(), key = lambda x: (x[1]),reverse=True))
-                best_k_t_minus_1_options = {key:sorted_curr_result[key] for key in sorted_curr_result.keys()[0:5]}
-                top_k_minus_1_tags = best_k_t_minus_1_options.keys()
-                #get the max prob tag for word 1
-                    
-            elif word_index == 1: #second word, can go on the k top tags found from word 1 for t_minus_1                               
-                for tag in self.seen_tags_set: # as t_i
-                    pi[word_index][tag] = {}
-                    bp[word_index][tag] = {}
-                    for tag_minus_1 in top_k_minus_1_tags:#t_minus_1 can go on the k top tags found from word 1      
-                        pi_for_beam_search[word_index][tag_minus_1] = {}
-                        pi[word_index][tag][tag_minus_1] = pi[word_index-1][tag_minus_1]["*"]*self.q["*"][tag_minus_1][tag]
-                        pi_for_beam_search[word_index][tag_minus_1][tag] = pi[word_index-1][tag_minus_1]["*"]*self.q["*"][tag_minus_1][tag]
-                    sorted_curr_result = collections.OrderedDict(sorted(pi_for_beam_search[word_index][tag_minus_1].items(), key= lambda x: (x[1]),reverse=True))
-                    top_k_minus_2_tags = top_k_minus_1_tags
-                    top_k_minus_1_tags = sorted_curr_result[0:k_top_prob_tags] #need to change to top k minus 1
-#                     max_tag, max_prob = self.find_max_prob_and_tag(pi[word_index][tag_minus_1])         
-#                     pi[word_index][tag_minus_1][tag] = max_prob
-#                     bp[word_index][tag_minus_1][tag] = max_tag                       
-            else: #word 3 and above
-                for tag in self.seen_tags_set:
-                    for tag_minus_1 in top_k_minus_1_tags:
-                        pi[word_index][tag] = {}
-                        bp[word_index][tag] = {}   
-                        pi_with_tag_minus_2 = []
-                        for tag_minus_2 in top_k_minus_2_tags: #go over all the t_i_2 options
-                            pi_with_tag_minus_2.append((pi[word_index-1][tag_minus_2][tag_minus_1]*self.q[tag_minus_2][tag_minus_1][tag],tag_minus_2))    
-                        #find the t_minus_2 that gave the highest prob
-                        
-                        pi[word_index][tag][tag_minus_1] = (pi[word_index-1][tag_minus_2][tag_minus_1]*self.q[tag_minus_2][tag_minus_1][tag],tag_minus_2)
-                        pi_for_beam_search[word_index][tag_minus_1][tag] = pi[word_index-1][tag_minus_2][tag_minus_1]*self.q[tag_minus_2][tag_minus_1][tag]
-                        max_prob , max_tag = self.find_max_prob_and_tag(pi[word_index][tag_minus_1])         
-                        pi[word_index][tag_minus_1][tag] = max_prob
-                        bp[word_index][tag_minus_1][tag] = max_tag
-                        sorted_curr_result = collections.OrderedDict(sorted(pi_for_beam_search[word_index][tag_minus_1].items(), key= lambda x: (x[1]),reverse=True))
-                        top_k_curr_tags = sorted_curr_result[0:k_top_prob_tags]
-                top_k_minus_2_tags = top_k_minus_1_tags
-                top_k_minus_1_tags = top_k_curr_tags         
+                pi[word_index] = {} #pword index] [ti][t_minus_1]
+                bp[word_index] = {}
+                if word_index == 0: 
+                    pi[word_index]["*"] = {}
+                    bp[word_index]["*"] = {}
+                    for tag in self.seen_tags_set: # as t_i
+                        pi[word_index]["*"][tag] = self.q["*"]["*"][tag]
+                        bp[word_index]["*"][tag] = "*"
+    #                     max_prob, max_tag = self.find_max_prob_and_tag(pi[word_index]["*"])         
+    #                     pi[word_index]["*"][tag] = max_prob
+    #                     bp[word_index]["*"][tag] = max_tag
+                    #get the max prob tag for word 1                   
+                elif word_index == 1: #second word, can go on the k top tags found from word 1 for t_minus_1                               
+                    for tag_minus_1 in self.seen_tags_set:#t_minus_1 can go on the k top tags found from word 1
+                        pi[word_index][tag_minus_1] = {}
+                        bp[word_index][tag_minus_1] = {} 
+                        for tag in self.seen_tags_set: # as t_i
+                            pi[word_index][tag_minus_1][tag] = pi[word_index-1]["*"][tag_minus_1]*self.q["*"][tag_minus_1][tag]
+                            bp[word_index][tag_minus_1][tag] = "*"  
+    #                     max_tag, max_prob = self.find_max_prob_and_tag(pi[word_index][tag_minus_1])         
+    #                     pi[word_index][tag_minus_1][tag] = max_prob
+    #                     bp[word_index][tag_minus_1][tag] = max_tag                       
+                else: #word 3 and above
+                    try:
+                        for tag in self.seen_tags_set:
+                            for tag_minus_1 in self.seen_tags_set:
+                                pi[word_index][tag_minus_1] = {}
+                                bp[word_index][tag_minus_1] = {}   
+                                pi_with_tag_minus_2 = []
+                                for tag_minus_2 in self.seen_tags_set: #go over all the t_i_2 options
+                                    pi_with_tag_minus_2.append((pi[word_index-1][tag_minus_2][tag_minus_1]*self.q[tag_minus_2][tag_minus_1][tag],tag_minus_2))    
+                                #find the t_minus_2 that gave the highest prob                        
+        #                         pi[word_index][tag][tag_minus_1] = (pi[word_index-1][tag_minus_1][tag_minus_2]*self.q[tag_minus_2][tag_minus_1][tag],tag_minus_2)
+                                max_prob , max_tag = self.find_max_prob_and_tag(pi_with_tag_minus_2)         
+                                pi[word_index][tag_minus_1][tag] = max_prob
+                                bp[word_index][tag_minus_1][tag] = max_tag
+                    except Exception as err: 
+                        sys.stderr.write("problem in viterbi with word index",word_index ,"with tag:",tag," tag minus 1:",tag_minus_1)     
+                        print err.args      
+                        print err   
+            except Exception as err: 
+                        sys.stderr.write("problem in viterbi with word index",word_index)     
+                        print err.args      
+                        print err
+        
         #finished calc the words, now find the best sequence - from the end to the beginning of the sentence
         #need to find the best u,v from pi[n]
         max_tn_prob = 0
@@ -419,9 +408,9 @@ class MEMM():
         return best_sentence_tags 
 
     def find_max_prob_and_tag(self,t_minus_2_and_prob_list):
-        tags,prob = zip(*t_minus_2_and_prob_list) 
+        prob , tags = zip(*t_minus_2_and_prob_list) 
         max_prob = max(prob)
-        max_tag = tags.index(max_prob)
+        max_tag = tags[prob.index(max_prob)]
         return (max_prob,max_tag)           
 #     def find_max_prob_and_tag(self,pi_dict):
 #         max_prob = max(pi_dict.iteritems(), key=operator.itemgetter(1))[1]
