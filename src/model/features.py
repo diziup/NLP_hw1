@@ -5,11 +5,13 @@ Feature functions for the POS tagging task
 from collections import OrderedDict
 import sys
 import csv
+import cPickle
+
 
 class feature_functions():
     feature_func_list = []
 
-    def __init__(self,setup,num_of_sentences,threshold):
+    def __init__(self,setup,num_of_sentences,threshold,reg_lambda):
 #         self.num_of_feature_functions = num_of_feature_functions
 #         self.features_res_vector = np.zeros(num_of_feature_functions)
         self.feature_func_list = []
@@ -43,6 +45,7 @@ class feature_functions():
         self.num_of_word_tag_3gram_features = 0
         self.input_sentence_file = self.data_path+r"\sec2-21.words"
         self.setup = setup
+        self.regularization_lambda = reg_lambda
         self.num_of_feature_func = 0
         self.apply_feature_function_dict = {"contextual_all":[self.extract_contextual_unigram_tag_with_word,\
                                                             self.extract_contextual_bigram_tag_with_word, \
@@ -291,19 +294,36 @@ class feature_functions():
         self.extract_trigram_tag_with_word()
     
     def set_contextual_features_dict(self):
+        filename = "features_dict_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_thredshold_"+str(self.word_tag_threshold)
         if self.setup == "contextual_unigram" or self.setup == "contextual_all":
             for i in range(0,len(self.frequent_word_tags_1gram_dict)):
                 new_key = self.frequent_word_tags_1gram_dict.keys()[i]
                 self.feature_tag_unigram[new_key] = i
+            self.save_to_pickle(self.feature_tag_unigram, filename)
         elif self.setup == "contextual_bigram" or self.setup == "contextual_all":
             for i in range(0,len(self.frequent_word_tags_2gram_dict)):
                 new_key = self.frequent_word_tags_2gram_dict.keys()[i]
                 self.feature_tag_bigram[tuple(new_key)]=i
+            self.save_to_pickle(self.feature_tag_bigram, filename)
         elif self.setup == "contextual_trigram" or self.setup == "contextual_all": 
             for i in range(0,len(self.frequent_word_tags_3gram_dict)):
                 new_key = self.frequent_word_tags_3gram_dict.keys()[i]
                 self.feature_tag_trigram[tuple(new_key)]=i
-        
+            self.save_to_pickle(self.feature_tag_trigram, filename)
+            
+    def save_to_pickle(self,d, filename):
+        with open(filename, 'wb') as handle:
+                cPickle.dump(d, handle)
+        handle.close()        
+    
+    def read_features_dict_for_test(self):
+        if self.setup == "contextual_unigram" or self.setup == "contextual_all":
+            self.feature_tag_unigram = cPickle.load( open( "features_dict_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_thredshold_"+str(self.word_tag_threshold), "rb" ) )
+        elif self.setup == "contextual_bigram" or self.setup == "contextual_all":
+            self.feature_tag_bigram = cPickle.load( open( "features_dict_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_thredshold_"+str(self.word_tag_threshold), "rb" ) )    
+        elif self.setup == "contextual_trigram" or self.setup == "contextual_all": 
+            self.feature_tag_trigram = cPickle.load( open( "features_dict_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_thredshold_"+str(self.word_tag_threshold), "rb" ) )
+              
 #LIORA
 #     def extract_contextual_features_new(self):
 #         self.extract_contextual_unigram_tag_with_word()
