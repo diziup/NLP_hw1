@@ -12,7 +12,6 @@ import sentence
 import collections
 import features
 import cPickle
-import operator
 
 
 class MEMM():
@@ -35,9 +34,8 @@ class MEMM():
         self.frequent_word_tag_pairs_dict = {}  #key - word, value - tag 
         self.word_tag_threshold = threshold
         self.word_tag_threshold_counter = 0
-        self.morphological_set_lambda = 1
-        self.contextual_set_lambda = 1
-        self.word_tag_set_lambda = 1
+        self.contextual_all_lambda = 0.5
+        self.morphological_all_lambda = 0.5
         self.morphological_setup_all = "morphological_all"
         self.morphological_setup_unigram = "morphological_unigram"
         self.morphological_setup_bigram = "morphological_bigram"
@@ -58,12 +56,46 @@ class MEMM():
                                                             self.feature_functions.get_word_tags_trigram_index],\
                                           "contextual_unigram":[self.feature_functions.get_word_tags_unigram_index],\
                                           "contextual_bigram":[self.feature_functions.get_word_tags_bigram_index],\
-                                          "contextual_trigram":[self.feature_functions.get_word_tags_trigram_index]
-                                        }
-        
+                                          "contextual_trigram":[self.feature_functions.get_word_tags_trigram_index],\
+                                          "morphological_all":[self.feature_functions.get_morphological_unigram_index,\
+                                                               self.feature_functions.get_morphological_bigram_index,\
+                                                               self.feature_functions.get_morphological_trigram_index],\
+                                          "morphological_unigram":[self.feature_functions.get_morphological_unigram_index],\
+                                          "morphological_bigram":[self.feature_functions.get_morphological_bigram_index],\
+                                          "morphological_trigram":[self.feature_functions.get_morphological_trigram_index],\
+                                          "smoothing_contextual":[self.feature_functions.get_word_tags_unigram_index,\
+                                                                  self.feature_functions.get_word_tags_bigram_index, \
+                                                                  self.feature_functions.get_word_tags_trigram_index],\
+                                          "smoothing_morphological":[self.feature_functions.get_morphological_unigram_index,\
+                                                                    self.feature_functions.get_morphological_bigram_index,\
+                                                                    self.feature_functions.get_morphological_trigram_index]
+                                          
+                                        }        
         self.q = {}  #key will be the possible t_i-2,t_i-1,t_i, value - its prob
         self.pi = {} #key - word, t_i-1,t_i value -  the max prob over all the t_i-2
         self.bp = {} #back pointer: key - word, t_i-1,t_i value - the tag t_i-2 that got the max prob
+        self.lambda_smoothing_contextual_all = 0.5
+        self.lambda_smoothing_morphological = 0.5
+        self.lambda_smoothing_unigram = 0.333
+        self.lambda_smoothing_bigram = 0.333
+        self.lambda_smoothing_trigram = 0.333
+        self.morphological_all_v_opt = None
+        self.morphological_unigram_v_opt = None
+        self.morphological_bigram_v_opt = None
+        self.morphological_bigram_v_opt = None
+        self.contextual_all_v_opt = None
+        self.contextual_unigram_v_opt = None
+        self.contextual_bigram_v_opt = None
+        self.contextual_trigram_v_opt = None
+        self.total_TP = 0.0
+        self.total_TN = 0.0
+        self.total_FP = 0.0
+        self.total_FN = 0.0
+        self.accuracy = 0.00
+        self.recall = 0.00
+        self.precision = 0.00
+        self.F_measure= 0.00
+        self.tags_results = {}
         
         
     def read_input_sentences_and_tags_for_test(self):
@@ -258,7 +290,7 @@ class MEMM():
             v_opt = fmin_l_bfgs_b(self.compute_Likelihood(), x0, self.compute_likelihood_gradient(), disp=True)
             self.v_optimal = v_opt[0]           
             print "v_optimal",self.v_optimal
-            with open("v_opt_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_thredshold_"+str(self.word_tag_threshold), 'wb') as handle:
+            with open("v_opt_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), 'wb') as handle:
                 cPickle.dump(self.v_optimal, handle)
             handle.close()    
 #             cPickle.dump(self.v_optimal, "v_opt_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda),"wb")
@@ -290,17 +322,10 @@ class MEMM():
             print err.args      
             print err                  
     
-    def compute_viterbi(self, sentence):
-        pi = {} #  value  the maximal prob 
-        bp = {} #  ; value  the tag that got maximal prob 
-        n = sentence.length
-        best_sentence_tags = [None] * n
-        
-        for word_index in range(0,n):
-            #initialize the S_k - the possible tags a word can get
+    def compute_q_prob_for_viterbi_single_features_set_setup(self,sentence,word_index):
+        #initialize the S_k - the possible tags a word can get
             tag_set_minus_1 = []
             tag_set_minus_two = []
-            
             if (word_index == 0):
                 tag_set_minus_1.append('*')
                 tag_set_minus_two.append('*')
@@ -316,21 +341,15 @@ class MEMM():
                 for tag_minus_1 in tag_set_minus_1:
                     self.q[tag_minus_2][tag_minus_1] = {}
                     all_tag_feature_vec_indices = {}      
-                    prob = {} 
-                    
+                    prob = {}       
                     # for t_i,t_i-1, t_i-2  - calc the normalization- the denominator for the prob
                     #get the tags that the current word was seen from, if it were in the train
-#                     if self.word_seen_tags_list_dict.has_key(sentence.get_word(word_index)):
-#                         curr_tag_tags_set = self.word_seen_tags_list_dict[sentence.get_word(word_index)] 
-#                     else:
-#                         curr_tag_tags_set = self.seen_tags_set
                     for tag in self.seen_tags_set:
                         #according to the setup, get the indices of the "on" features for the current x.
                         inner_product = 0
                         curr_indices = [] = []
                         for func in self.get_indices_function_dict[self.setup]:
                             curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
-#                         feature_vec_indices = self.features_functions.get_contextual_feature_vec_indices(tag,sentence.get_tag(word_index+1),sentence.get_tag(word_index),sentence.get_word(word_index))
                         all_tag_feature_vec_indices[tag] = curr_indices
                         for feature_index in all_tag_feature_vec_indices[tag]:                                                  
                             inner_product += self.v_optimal[feature_index]*1
@@ -338,10 +357,170 @@ class MEMM():
                     #final normalized prob
                     prob_denominator = sum(prob.values())
                     for tag in self.seen_tags_set:
-                        self.q[tag_minus_2][tag_minus_1][tag] = float(prob[tag]/prob_denominator)
-            
-            try:#apply the recursion with beam search - reduce the runs on the possible\
-                #set of tags-  instead of T*T*T - to T*k*k
+                        self.q[tag_minus_2][tag_minus_1][tag] = float(prob[tag]/prob_denominator)       
+    
+    def compute_q_prob_for_viterbi_linear_interpolation_setup(self,sentence,word_index):
+        #have 2 prob rountines for the contextual_all and morphological_all, when the final q is their sum
+        #initialize the S_k - the possible tags a word can get
+            tag_set_minus_1 = []
+            tag_set_minus_two = []
+            if (word_index == 0):
+                tag_set_minus_1.append('*')
+                tag_set_minus_two.append('*')
+            elif (word_index == 1):
+                tag_set_minus_1 = self.seen_tags_set #maybe here 
+                tag_set_minus_two.append('*')
+            elif (word_index > 1):
+                tag_set_minus_1 = self.seen_tags_set #need to change according to the beam search
+                tag_set_minus_two = self.seen_tags_set
+            # calc q - have a dict of dicts - for all the possible t_i_2,t_i_1 and t_i prob
+            for tag_minus_2 in tag_set_minus_two:
+                self.q[tag_minus_2] = {}
+                for tag_minus_1 in tag_set_minus_1:
+                    self.q[tag_minus_2][tag_minus_1] = {}
+                    all_tag_feature_vec_indices_contextual_all = {}    
+                    all_tag_feature_vec_indices_morphological_all = {}     
+                    prob_contextual_all = {}
+                    prob_morphological_all = {}    
+                    # for t_i,t_i-1, t_i-2  - calc the normalization- the denominator for the prob
+                    #get the tags that the current word was seen from, if it were in the train
+                    for tag in self.seen_tags_set:
+                        #according to the setup, get the indices of the "on" features for the current x.
+                        inner_product = 0
+                        curr_indices = [] = []
+                        for func in self.get_indices_function_dict["contextual_all"]:
+                            curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
+                        all_tag_feature_vec_indices_contextual_all[tag] = curr_indices
+                        for feature_index in all_tag_feature_vec_indices_contextual_all[tag]:                                                  
+                            inner_product += self.contextual_all_v_opt[feature_index]*1
+                        prob_contextual_all[tag] = math.exp(inner_product)
+                    #final normalized prob
+                    prob_denominator_contextuall = sum(prob_contextual_all)
+                    for tag in self.seen_tags_set:
+                        self.q[tag_minus_2][tag_minus_1][tag] = self.contextual_all_lambda*float(prob_contextual_all[tag]/prob_denominator_contextuall)       
+                    
+                    for tag in self.seen_tags_set:
+                        #according to the setup, get the indices of the "on" features for the current x.
+                        inner_product = 0
+                        curr_indices = [] = []
+                        for func in self.get_indices_function_dict["morphological_all"]:
+                            curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
+                        all_tag_feature_vec_indices_morphological_all[tag] = curr_indices
+                        for feature_index in all_tag_feature_vec_indices_morphological_all[tag]:                                                  
+                            inner_product += self.morphological_all_v_opt[feature_index]*1
+                        prob_morphological_all[tag] = math.exp(inner_product)
+                    #final normalized prob
+                    prob_denominator_morphological = sum(prob_morphological_all)
+                    for tag in self.seen_tags_set:
+                        self.q[tag_minus_2][tag_minus_1][tag] += self.morphological_all_lambda*float(prob_morphological_all[tag]/prob_denominator_morphological) 
+    
+    def compute_q_prob_for_viterbi_smoothing_setup(self,sentence,word_index):
+        #have 3 prob rountines for the unigram,bigram and trigram 
+        #initialize the S_k - the possible tags a word can get
+            tag_set_minus_1 = []
+            tag_set_minus_two = []
+            if (word_index == 0):
+                tag_set_minus_1.append('*')
+                tag_set_minus_two.append('*')
+            elif (word_index == 1):
+                tag_set_minus_1 = self.seen_tags_set #maybe here 
+                tag_set_minus_two.append('*')
+            elif (word_index > 1):
+                tag_set_minus_1 = self.seen_tags_set #need to change according to the beam search
+                tag_set_minus_two = self.seen_tags_set
+            # calc q - have a dict of dicts - for all the possible t_i_2,t_i_1 and t_i prob
+            for tag_minus_2 in tag_set_minus_two:
+                self.q[tag_minus_2] = {}
+                for tag_minus_1 in tag_set_minus_1:
+                    self.q[tag_minus_2][tag_minus_1] = {}
+                    all_tag_feature_vec_indices_unigram = {}    
+                    all_tag_feature_vec_indices_bigram = {}   
+                    all_tag_feature_vec_indices_trigram = {}       
+                    prob_unigram = {}
+                    prob_bigram = {}
+                    prob_trigram = {}       
+                    # for t_i,t_i-1, t_i-2  - calc the normalization- the denominator for the prob
+                    #get the tags that the current word was seen from, if it were in the train - 
+                    #unigram
+                    for tag in self.seen_tags_set:
+                        #according to the setup, get the indices of the "on" features for the current x.
+                        inner_product = 0
+                        curr_indices = [] = []
+                        if self.setup == "smoothing_contextual":
+                            for func in self.get_indices_function_dict["contextual_unigram"]:
+                                curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
+                        elif self.setup == "smoothing_morphological":
+                            for func in self.get_indices_function_dict["morphological_unigram"]:
+                                curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
+                        all_tag_feature_vec_indices_unigram[tag] = curr_indices
+                        for feature_index in all_tag_feature_vec_indices_unigram[tag]:                                                  
+                            if self.setup == "smoothing_contextual": 
+                                inner_product += self.contextual_unigram_v_opt[feature_index]*1
+                            elif self.setup == "smoothing_morphological":
+                                inner_product += self.morphological_unigram_v_opt[feature_index]*1
+                        prob_unigram[tag] = math.exp(inner_product)
+                    #final normalized prob
+                    prob_denominator_unigram = sum(prob_unigram)
+                    for tag in self.seen_tags_set:
+                        self.q[tag_minus_2][tag_minus_1][tag] = self.smoothing_lambda_unigram*float(prob_unigram[tag]/prob_denominator_unigram)       
+                    #bigram
+                    for tag in self.seen_tags_set:
+                        #according to the setup, get the indices of the "on" features for the current x.
+                        inner_product = 0
+                        curr_indices = [] = []
+                        if self.setup == "smoothing_contextual":
+                            for func in self.get_indices_function_dict["contextual_bigram"]:
+                                curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
+                        elif self.setup == "smoothing_morphological":
+                            for func in self.get_indices_function_dict["morphological_bigram"]:    
+                                all_tag_feature_vec_indices_bigram[tag] = curr_indices
+                        for feature_index in all_tag_feature_vec_indices_bigram[tag]:                                                  
+                            if self.setup == "smoothing_contextual": 
+                                inner_product += self.contextual_bigram_v_opt[feature_index]*1
+                            elif self.setup == "smoothing_morphological":
+                                inner_product += self.morphological_bigram_v_opt[feature_index]*1
+                        prob_bigram[tag] = math.exp(inner_product)
+                    #final normalized prob
+                    prob_denominator_bigram = sum(prob_bigram)
+                    for tag in self.seen_tags_set:
+                        self.q[tag_minus_2][tag_minus_1][tag] += self.smoothing_lambda_bigram*float(prob_bigram[tag]/prob_denominator_bigram)
+                    #trigram
+                    for tag in self.seen_tags_set:
+                        #according to the setup, get the indices of the "on" features for the current x.
+                        inner_product = 0
+                        curr_indices = [] = []
+                        if self.setup == "smoothing_contextual":
+                            for func in self.get_indices_function_dict["contextual_trigram"]:
+                                curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
+                        elif self.setup == "smoothing_morphological":
+                            for func in self.get_indices_function_dict["morphological_trigram"]:
+                                curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
+                        all_tag_feature_vec_indices_trigram[tag] = curr_indices
+                        for feature_index in all_tag_feature_vec_indices_trigram[tag]:                                                  
+                            if self.setup == "smoothing_contextual": 
+                                inner_product += self.contextual_trigram_v_opt[feature_index]*1
+                            elif self.setup == "smoothing_morphological":
+                                inner_product += self.morphological_trigram_v_opt[feature_index]*1
+                        prob_trigram[tag] = math.exp(inner_product)
+                    #final normalized prob
+                    prob_denominator_trigram = sum(prob_trigram)
+                    for tag in self.seen_tags_set:
+                        self.q[tag_minus_2][tag_minus_1][tag] += self.smoothing_lambda_trigram*float(prob_trigram[tag]/prob_denominator_trigram)                    
+       
+    def compute_viterbi(self, sentence):
+        pi = {} #  value  the maximal prob 
+        bp = {} #  ; value  the tag that got maximal prob 
+        n = sentence.length
+        best_sentence_tags = [None] * n
+        print "viterbi: in sentence" , self.test_sentences_list.index(sentence)
+        for word_index in range(0,n):
+            if self.setup == "linear_inter":
+                self.compute_q_prob_for_viterbi_linear_interpolation_setup(sentence,word_index)
+            elif self.setup == "smoothing_contextual":
+                self.compute_q_prob_for_viterbi_smoothing_setup(sentence,word_index)
+            else:
+                self.compute_q_prob_for_viterbi_single_features_set_setup(sentence,word_index)            
+            try:#apply the recursion 
             #for the first word -  need to calculate all the |tags| options:
                 pi[word_index] = {} #pword index] [ti][t_minus_1]
                 bp[word_index] = {}
@@ -351,31 +530,23 @@ class MEMM():
                     for tag in self.seen_tags_set: # as t_i
                         pi[word_index]["*"][tag] = self.q["*"]["*"][tag]
                         bp[word_index]["*"][tag] = "*"
-    #                     max_prob, max_tag = self.find_max_prob_and_tag(pi[word_index]["*"])         
-    #                     pi[word_index]["*"][tag] = max_prob
-    #                     bp[word_index]["*"][tag] = max_tag
                     #get the max prob tag for word 1                   
-                elif word_index == 1: #second word, can go on the k top tags found from word 1 for t_minus_1                               
-                    for tag_minus_1 in self.seen_tags_set:#t_minus_1 can go on the k top tags found from word 1
+                elif word_index == 1: #second word                            
+                    for tag_minus_1 in self.seen_tags_set:
                         pi[word_index][tag_minus_1] = {}
                         bp[word_index][tag_minus_1] = {} 
                         for tag in self.seen_tags_set: # as t_i
                             pi[word_index][tag_minus_1][tag] = pi[word_index-1]["*"][tag_minus_1]*self.q["*"][tag_minus_1][tag]
                             bp[word_index][tag_minus_1][tag] = "*"  
-    #                     max_tag, max_prob = self.find_max_prob_and_tag(pi[word_index][tag_minus_1])         
-    #                     pi[word_index][tag_minus_1][tag] = max_prob
-    #                     bp[word_index][tag_minus_1][tag] = max_tag                       
                 else: #word 3 and above
                     try:
-                        for tag in self.seen_tags_set:
-                            for tag_minus_1 in self.seen_tags_set:
-                                pi[word_index][tag_minus_1] = {}
-                                bp[word_index][tag_minus_1] = {}   
+                        for tag_minus_1 in self.seen_tags_set:
+                            pi[word_index][tag_minus_1] = {}
+                            bp[word_index][tag_minus_1] = {}   
+                            for tag in self.seen_tags_set: 
                                 pi_with_tag_minus_2 = []
                                 for tag_minus_2 in self.seen_tags_set: #go over all the t_i_2 options
                                     pi_with_tag_minus_2.append((pi[word_index-1][tag_minus_2][tag_minus_1]*self.q[tag_minus_2][tag_minus_1][tag],tag_minus_2))    
-                                #find the t_minus_2 that gave the highest prob                        
-        #                         pi[word_index][tag][tag_minus_1] = (pi[word_index-1][tag_minus_1][tag_minus_2]*self.q[tag_minus_2][tag_minus_1][tag],tag_minus_2)
                                 max_prob , max_tag = self.find_max_prob_and_tag(pi_with_tag_minus_2)         
                                 pi[word_index][tag_minus_1][tag] = max_prob
                                 bp[word_index][tag_minus_1][tag] = max_tag
@@ -393,16 +564,16 @@ class MEMM():
         max_tn_prob = 0
         best_tag_minus_1 = 0
         best_tag = 0
-        for tag_minus_1 in pi[n].keys():
-            for tag in pi[n][tag_minus_1].keys():
-                if pi[n][tag_minus_1][tag] > max_tn_prob:
-                    max_tn_prob = pi[n][tag_minus_1][tag]
+        for tag_minus_1 in pi[n-1].keys():
+            for tag in pi[n-1][tag_minus_1].keys():
+                if pi[n-1][tag_minus_1][tag] > max_tn_prob:
+                    max_tn_prob = pi[n-1][tag_minus_1][tag]
                     best_tag_minus_1 = tag_minus_1
                     best_tag = tag 
-        best_sentence_tags[n] = best_tag
-        best_sentence_tags[n-1] = (best_tag_minus_1)
+        best_sentence_tags[n-1] = best_tag
+        best_sentence_tags[n-2] = (best_tag_minus_1)
         #now calc the best sequence on the rest of the sentence - from k = (n-2),...,1:
-        for k in range(n-2,-1,-1):
+        for k in range(n-3,-1,-1):
             best_sentence_tags[k] = bp[k+2][best_sentence_tags[k+1]][best_sentence_tags[k+2]]
             
         return best_sentence_tags 
@@ -433,7 +604,7 @@ class MEMM():
         self.read_input_sentences_and_tags_for_train()
         self.compute_features_on_all_words()
         self.optimize_v()
-#         self.summarize()
+        self.summarize()
     
 #     def analyze_results(self):
 #         #compute the precision/recall for each tag in the data.
@@ -441,7 +612,19 @@ class MEMM():
 #         results_per_tag = {} #key is a tag, value is a list of true_pos, false_neg, false_pos
 #         for sentence_index in 
     def read_setup_data(self):
-        self.v_optimal =  cPickle.load( open("v_opt_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_thredshold_"+str(self.word_tag_threshold), "rb" ) )
+        if self.setup == "linear_inter": #need to read the contex_all v_opt and the morph_all v_opt
+            self.contextual_all_v_opt =  cPickle.load( open("v_opt_contextual_all_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
+            self.morphological_all_v_opt = cPickle.load( open("v_opt_morphological_all_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
+        elif self.setup == "smoothing_contextual": #read the uni,bi,trigram v
+            self.contextual_unigram_v_opt = cPickle.load( open("v_opt_contextual_unigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
+            self.contextual_bigram_v_opt = cPickle.load( open("v_opt_contextual_bigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
+            self.contextual_trigram_v_opt = cPickle.load( open("v_opt_contextual_trigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )            
+        elif self.setup == "smoothing_morphological": #read the uni,bi,trigram v
+            self.morphological_unigram_v_opt = cPickle.load( open("v_opt_morphological_unigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
+            self.morphological_bigram_v_opt = cPickle.load( open("v_opt_morphological_bigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
+            self.morphological_trigram_v_opt = cPickle.load( open("v_opt_morphological_trigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )            
+        else:
+            self.v_optimal =  cPickle.load( open("v_opt_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
         self.word_seen_tags_list_dict = cPickle.load( open("word_seen_tags_list_dict","rb"))
         self.seen_tags_set = cPickle.load( open("seen_tags_set","rb"))
         
@@ -451,6 +634,62 @@ class MEMM():
         self.read_setup_data()
         for sentence in self.test_sentences_list:
             self.test_tags_results.append(self.compute_viterbi(sentence))
-#             self.test_tags_results[self.test_sentences_list.index(sentence)] = self.compute_viterbi(sentence)
-   
+        self.save_to_pickle(self.test_tags_results, "test_tags_results_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_threshold_"+str(self.word_tag_threshold))
         
+    def read_test_tags_results(self):
+        self.test_tags_results = cPickle.load( open("test_tags_results_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
+        self.read_input_sentences_and_tags_for_test()
+        #compare each sentence length of tags -  gold and predicted
+        diff_len_sen_index = []
+        for sentence_index in range(0,len(self.test_tags_results)):
+            if len(self.test_tags_results[sentence_index]) != self.test_sentences_list[sentence_index].length:
+                diff_len_sen_index.append(sentence_index)
+        if len(diff_len_sen_index) > 0:
+            print diff_len_sen_index     
+        else:
+            print "no diff len sentence"
+    
+    def analyze_results(self):
+        num_of_tags = 0
+        tags_results = {}
+        real_tag_list = []
+        pred_tag_list = []
+        #init confusion matrix for each tag from results and actual vector of tags
+        for sentence in self.test_sentences_list:
+            for j in range(0,len(sentence.POS_tags)):
+                real_tag = sentence.get_tag(j)
+                if real_tag!='*':
+                    if(tags_results.has_key(real_tag)==False):
+                        tags_results[real_tag]  = {"TP": 0,"TN":0,"FP":0,"FN":0}
+                    num_of_tags +=1
+                    real_tag_list.append(real_tag)
+        for tag_list in range(0,len(self.test_tags_results)):
+            for tag in range(0,len(self.test_tags_results[tag_list])):
+                predict_tag = self.test_tags_results[tag_list][tag]
+                if(tags_results.has_key(predict_tag)==False):
+                    tags_results[predict_tag]  = {"TP": 0,"TN":0,"FP":0,"FN":0}
+                num_of_tags +=1
+                pred_tag_list.append(predict_tag)
+        #calc TP and FN
+        for real_tag in range(0,len(real_tag_list)):
+            if(real_tag_list[real_tag]==pred_tag_list[real_tag]):
+                tags_results[real_tag_list[real_tag]]["TP"]+=1
+            else:
+                tags_results[real_tag_list[real_tag]]["FN"]+=1
+        #calc FP
+        for pred_tag in range(0,len(pred_tag_list)):
+            if(real_tag_list[pred_tag]!=pred_tag_list[pred_tag]):
+                tags_results[pred_tag_list[pred_tag]]["FP"]+=1
+        #calc total measures
+        for tag in tags_results.keys():
+            tags_results[tag]["TN"] = num_of_tags-tags_results[tag]["TP"]-tags_results[tag]["FP"]-tags_results[tag]["FN"]
+        for tag in tags_results.keys():
+            self.total_TP +=tags_results[tag]["TP"]
+            self.total_TN +=tags_results[tag]["TN"]
+            self.total_FP +=tags_results[tag]["FP"]
+            self.total_FN +=tags_results[tag]["FN"]
+        self.accuracy =(self.total_TP+self.total_TN)/(self.total_TP+self.total_TN+self.total_FP+self.total_FN)
+        self.recall =(self.total_TP)/(self.total_TP+self.total_FN)
+        self.precision =(self.total_TP)/(self.total_TP+self.total_FP)
+        self.F_measure = 2*(self.recall*self.precision)/(self.recall+self.precision)
+        self.tags_results = tags_results
