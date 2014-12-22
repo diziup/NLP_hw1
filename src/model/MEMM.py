@@ -12,7 +12,6 @@ import sentence
 import collections
 import features
 import cPickle
-import numpy as np
 
 class MEMM():
     
@@ -20,11 +19,11 @@ class MEMM():
         
         self.num_of_feature_functions = 0
         self.tuple_probabilities_dict = {}
-#         self.data_path = r"C:\study\technion\MSc\3rd_semester\NLP\hw1\sec2-21"
-#         self.input_sentence_file = self.data_path+r"\sec2-21.words" 
-#         self.input_tags_file = self.data_path+r"\sec2-21.pos"
-        self.input_tags_file = r"../data/sec2-21/sec2-21.pos"
-        self.input_sentence_file = r"../data/sec2-21/sec2-21.words" 
+        self.data_path = r"C:\study\technion\MSc\3rd_semester\NLP\hw1\sec2-21"
+        self.input_sentence_file = self.data_path+r"\sec2-21.words" 
+        self.input_tags_file = self.data_path+r"\sec2-21.pos"
+#         self.input_tags_file = r"../data/sec2-21/sec2-21.pos"
+#         self.input_sentence_file = r"../data/sec2-21/sec2-21.words" 
         self.seen_tags_set = []
         self.regularization_lambda = reg_lambda
         self.num_of_sentences = num_of_sentence
@@ -35,6 +34,9 @@ class MEMM():
         self.frequent_word_tags_list_dict = {} #key - word, value - list of tags with count larger than threshold 
         self.frequent_word_tag_pairs_dict = {}  #key - word, value - tag 
         self.word_tag_threshold = threshold
+        self.contextual_unigram_threshold = 7
+        self.contextual_bigram_threshold = 7
+        self.contextual_trigram_threshold = 6
         self.word_tag_threshold_counter = 0
         self.contextual_all_lambda = 0.5
         self.morphological_all_lambda = 0.5
@@ -104,7 +106,7 @@ class MEMM():
         sentences_file = open(self.input_sentence_file,"rb").readlines()
         tags_file = open(self.input_tags_file,"rb").readlines()
 #         seen_tags_set = set()
-        for i in range(self.num_of_sentences,self.num_of_sentences+1000):
+        for i in range(self.num_of_sentences, self.num_of_sentences+2000):
             words = sentences_file[i].split()
             tags = tags_file[i].split()
             s = sentence.sentence(words,tags)
@@ -459,26 +461,32 @@ class MEMM():
                     # for t_i,t_i-1, t_i-2  - calc the normalization- the denominator for the prob
                     #get the tags that the current word was seen from, if it were in the train - 
                     #unigram
-                    for tag in self.seen_tags_set:
-                        #according to the setup, get the indices of the "on" features for the current x.
-                        inner_product = 0
-                        curr_indices = [] 
-                        if self.setup == "smoothing_contextual":
-                            for func in self.get_indices_function_dict["contextual_unigram"]:
-                                curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
-                        elif self.setup == "smoothing_morphological":
-                            for func in self.get_indices_function_dict["morphological_unigram"]:
-                                curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
-                        
-                        all_tag_feature_vec_indices_unigram[tag] = curr_indices
-                        for feature_index in all_tag_feature_vec_indices_unigram[tag]:                                                  
-                            if self.setup == "smoothing_contextual": 
-                                inner_product += self.contextual_unigram_v_opt[feature_index]*1
+                    try:
+                        for tag in self.seen_tags_set:
+                            #according to the setup, get the indices of the "on" features for the current x.
+                            inner_product = 0
+                            curr_indices = [] 
+                            if self.setup == "smoothing_contextual":
+                                for func in self.get_indices_function_dict["contextual_unigram"]:
+                                    curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
                             elif self.setup == "smoothing_morphological":
-                                inner_product += self.morphological_unigram_v_opt[feature_index]*1
-                        prob_unigram[tag] = math.exp(inner_product)
+                                for func in self.get_indices_function_dict["morphological_unigram"]:
+                                    curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
+                            
+                            all_tag_feature_vec_indices_unigram[tag] = curr_indices
+                            if all_tag_feature_vec_indices_unigram.has_key(tag):
+                                for feature_index in all_tag_feature_vec_indices_unigram[tag]:                                                  
+                                    if self.setup == "smoothing_contextual": 
+                                        inner_product += self.contextual_unigram_v_opt[feature_index]*1
+                                    elif self.setup == "smoothing_morphological":
+                                        inner_product += self.morphological_unigram_v_opt[feature_index]*1
+                            prob_unigram[tag] = math.exp(inner_product)
+                    except Exception as err: 
+                        sys.stderr.write("problem in viterbi with tag",tag)     
+                        print err.args      
+                        print err
                     #final normalized prob
-                    prob_denominator_unigram = sum(prob_unigram)
+                    prob_denominator_unigram = sum(prob_unigram.values())
                     for tag in self.seen_tags_set:
                         self.q[tag_minus_2][tag_minus_1][tag] = self.smoothing_lambda_unigram*float(prob_unigram[tag]/prob_denominator_unigram)       
                     #bigram
@@ -492,14 +500,15 @@ class MEMM():
                         elif self.setup == "smoothing_morphological":
                             for func in self.get_indices_function_dict["morphological_bigram"]:    
                                 all_tag_feature_vec_indices_bigram[tag] = curr_indices
-                        for feature_index in all_tag_feature_vec_indices_bigram[tag]:                                                  
-                            if self.setup == "smoothing_contextual": 
-                                inner_product += self.contextual_bigram_v_opt[feature_index]*1
-                            elif self.setup == "smoothing_morphological":
-                                inner_product += self.morphological_bigram_v_opt[feature_index]*1
+                        if all_tag_feature_vec_indices_bigram.has_key(tag):
+                            for feature_index in all_tag_feature_vec_indices_bigram[tag]:                                                  
+                                if self.setup == "smoothing_contextual": 
+                                    inner_product += self.contextual_bigram_v_opt[feature_index]*1
+                                elif self.setup == "smoothing_morphological":
+                                    inner_product += self.morphological_bigram_v_opt[feature_index]*1
                         prob_bigram[tag] = math.exp(inner_product)
                     #final normalized prob
-                    prob_denominator_bigram = sum(prob_bigram)
+                    prob_denominator_bigram = sum(prob_bigram.values())
                     for tag in self.seen_tags_set:
                         self.q[tag_minus_2][tag_minus_1][tag] += self.smoothing_lambda_bigram*float(prob_bigram[tag]/prob_denominator_bigram)
                     #trigram
@@ -514,14 +523,15 @@ class MEMM():
                             for func in self.get_indices_function_dict["morphological_trigram"]:
                                 curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
                         all_tag_feature_vec_indices_trigram[tag] = curr_indices
-                        for feature_index in all_tag_feature_vec_indices_trigram[tag]:                                                  
-                            if self.setup == "smoothing_contextual": 
-                                inner_product += self.contextual_trigram_v_opt[feature_index]*1
-                            elif self.setup == "smoothing_morphological":
-                                inner_product += self.morphological_trigram_v_opt[feature_index]*1
+                        if all_tag_feature_vec_indices_trigram.has_key(tag):
+                            for feature_index in all_tag_feature_vec_indices_trigram[tag]:                                                  
+                                if self.setup == "smoothing_contextual": 
+                                    inner_product += self.contextual_trigram_v_opt[feature_index]*1
+                                elif self.setup == "smoothing_morphological":
+                                    inner_product += self.morphological_trigram_v_opt[feature_index]*1
                         prob_trigram[tag] = math.exp(inner_product)
                     #final normalized prob
-                    prob_denominator_trigram = sum(prob_trigram)
+                    prob_denominator_trigram = sum(prob_trigram.values())
                     for tag in self.seen_tags_set:
                         self.q[tag_minus_2][tag_minus_1][tag] += self.smoothing_lambda_trigram*float(prob_trigram[tag]/prob_denominator_trigram)                    
        
@@ -636,9 +646,9 @@ class MEMM():
             self.contextual_all_v_opt =  cPickle.load( open("v_opt_contextual_all_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
             self.morphological_all_v_opt = cPickle.load( open("v_opt_morphological_all_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
         elif self.setup == "smoothing_contextual": #read the uni,bi,trigram v
-            self.contextual_unigram_v_opt = cPickle.load( open("v_opt_contextual_unigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
-            self.contextual_bigram_v_opt = cPickle.load( open("v_opt_contextual_bigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
-            self.contextual_trigram_v_opt = cPickle.load( open("v_opt_contextual_trigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )            
+            self.contextual_unigram_v_opt = cPickle.load( open("v_opt_contextual_unigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.contextual_unigram_threshold), "rb" ) )
+            self.contextual_bigram_v_opt = cPickle.load( open("v_opt_contextual_bigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.contextual_bigram_threshold), "rb" ) )
+            self.contextual_trigram_v_opt = cPickle.load( open("v_opt_contextual_trigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.contextual_trigram_threshold), "rb" ) )            
         elif self.setup == "smoothing_morphological": #read the uni,bi,trigram v
             self.morphological_unigram_v_opt = cPickle.load( open("v_opt_morphological_unigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
             self.morphological_bigram_v_opt = cPickle.load( open("v_opt_morphological_bigram_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
@@ -654,7 +664,14 @@ class MEMM():
         self.read_setup_data()
         for sentence in self.test_sentences_list:
             self.test_tags_results.append(self.compute_viterbi(sentence))
-        self.save_to_pickle(self.test_tags_results, "test_tags_results_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_threshold_"+str(self.word_tag_threshold))
+        if "smoothing" in self.setup:
+            self.save_to_pickle(self.test_tags_results, "test_tags_results_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_unigram_lambda_"+str(self.smoothing_lambda_unigram))\
+            +"_bigram_lambda_"+str(self.smoothing_lambda_bigram)+"_trigram_lambda_"+str(self.smoothing_lambda_trigram)
+        elif self.setup == "linear_inter": 
+            self.save_to_pickle(self.test_tags_results, "test_tags_results_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"contextual_all_lambda_"+str(self.contextual_all_lambda))\
+            +"_morphological_all_lambda_"+str(self._morphological_all_lambda_)
+        else:
+            self.save_to_pickle(self.test_tags_results, "test_tags_results_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_threshold_"+str(self.word_tag_threshold))
         
     def read_test_tags_results(self):
         self.test_tags_results = cPickle.load( open("test_tags_results_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
