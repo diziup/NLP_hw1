@@ -33,9 +33,10 @@ class feature_functions():
         self.num_of_word_tag_features = 0
 #         self.data_path = r"C:\study\technion\MSc\3rd_semester\NLP\hw1\sec2-21"
 #         self.input_tags_file = self.data_path+r"\sec2-21.pos"
+#         self.input_sentence_file = self.data_path+r"\sec2-21.words"
+
         self.input_tags_file = r"../data/sec2-21/sec2-21.pos"
         self.input_sentence_file = r"../data/sec2-21/sec2-21.words"
-#         self.input_sentence_file = self.data_path+r"\sec2-21.words"
         self.tags_list = []
         self.num_of_sentences = num_of_sentences
         self.word_tag_threshold = threshold

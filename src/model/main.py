@@ -10,9 +10,9 @@ import sys
 try:
     t_start = time.clock()
     setup = "morphological_all"
-    num_of_sentences = 5000
+    num_of_sentences = 10
     reg_lambda = 0.2
-    threshold = 12 # context'- unigram 6, bigram 7, trigram 6, all - 15. morph:uni - 0, bi - , 
+    threshold = 0 # context'- unigram 6, bigram 7, trigram 6, all - 15. morph:uni - 0, bi - , 
     MEMM_model = MEMM.MEMM(setup, num_of_sentences, reg_lambda, threshold)
     MEMM_model.train_memm()
 #     MEMM_model.test_memm()

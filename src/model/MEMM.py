@@ -12,7 +12,7 @@ import sentence
 import collections
 import features
 import cPickle
-
+import numpy as np
 
 class MEMM():
     
@@ -20,9 +20,11 @@ class MEMM():
         
         self.num_of_feature_functions = 0
         self.tuple_probabilities_dict = {}
-        self.data_path = r"C:\study\technion\MSc\3rd_semester\NLP\hw1\sec2-21"
-        self.input_sentence_file = self.data_path+r"\sec2-21.words" 
-        self.input_tags_file = self.data_path+r"\sec2-21.pos" 
+#         self.data_path = r"C:\study\technion\MSc\3rd_semester\NLP\hw1\sec2-21"
+#         self.input_sentence_file = self.data_path+r"\sec2-21.words" 
+#         self.input_tags_file = self.data_path+r"\sec2-21.pos"
+        self.input_tags_file = r"../data/sec2-21/sec2-21.pos"
+        self.input_sentence_file = r"../data/sec2-21/sec2-21.words" 
         self.seen_tags_set = []
         self.regularization_lambda = reg_lambda
         self.num_of_sentences = num_of_sentence
@@ -175,6 +177,7 @@ class MEMM():
                 t1 = time.clock()
                 likelihood = 0
                 v = args[0]
+                self.save_v_vector(v)
                 sentence_counter = 0
 #                 printing = int(self.num_of_sentences/5)
                 for sentence in self.train_sentences_list:                   
@@ -228,11 +231,24 @@ class MEMM():
             return -(likelihood)
         return likelihood_func
     
+    def save_v_vector(self,v):
+        f = open('v_log_'+self.setup+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), 'a')
+        for v_value in v:
+            f.write("%s" % v_value)
+        f.write("\n")
+        f.close()
+        #pickle also
+        with open("v_log_pickle_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold), 'a') as handle:
+                cPickle.dump(v, handle)
+        handle.close()    
+
     def compute_likelihood_gradient(self):
         def gradient_likelihood(*args):
             print "computing gradientL"
             t1 = time.clock()
             v = args[0]
+            
+           
             try:
                 #key is a tag, value is a list of feature indices "on"
                 likelihood_derivative = [0] * self.num_of_feature_functions                
