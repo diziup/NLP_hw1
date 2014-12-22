@@ -31,8 +31,11 @@ class feature_functions():
         self.num_of_morphological_tag_features = 0
         self.num_of_morphological_features = 2
         self.num_of_word_tag_features = 0
-        self.data_path = r"C:\study\technion\MSc\3rd_semester\NLP\hw1\sec2-21"
-        self.input_tags_file = self.data_path+r"\sec2-21.pos"
+#         self.data_path = r"C:\study\technion\MSc\3rd_semester\NLP\hw1\sec2-21"
+#         self.input_tags_file = self.data_path+r"\sec2-21.pos"
+        self.input_tags_file = r"../data/sec2-21/sec2-21.pos"
+        self.input_sentence_file = r"../data/sec2-21/sec2-21.words"
+#         self.input_sentence_file = self.data_path+r"\sec2-21.words"
         self.tags_list = []
         self.num_of_sentences = num_of_sentences
         self.word_tag_threshold = threshold
@@ -43,7 +46,7 @@ class feature_functions():
         self.num_of_word_tag_1gram_features = 0
         self.num_of_word_tag_2gram_features = 0
         self.num_of_word_tag_3gram_features = 0
-        self.input_sentence_file = self.data_path+r"\sec2-21.words"
+        
         self.setup = setup
         self.regularization_lambda = reg_lambda
         self.num_of_feature_func = 0
@@ -57,6 +60,8 @@ class feature_functions():
         self.morphological_unigram_features = {}
         self.morphological_bigram_features = {}
         self.morphological_trigram_features = {}
+        self.prefix_list = ['re','co','in','pr','de','st','pre','con','di','pro']
+        self.suffix_list = ['s','e','ed','y','ing','n','t','es','l','er','ly','ion','ted','ers','ent','ons','ies',]
 #     2. word_tag setup  - Set of contextual Features + current word
 
     def extract_word_tag_features(self,d):
@@ -67,6 +72,7 @@ class feature_functions():
                 word_tag_triple_cnt +=1
     
     def extract_contextual_bigram_tag_with_word(self,list_of_sentences):
+        print "extracting contextual bigram tag..."
         temp_word_tag_dict = {}
         word_2tags_list_dict = {}
 
@@ -105,6 +111,7 @@ class feature_functions():
         return self.num_of_word_tag_2gram_features
     
     def extract_contextual_unigram_tag_with_word(self, list_of_sentences):
+        print "extracting contextual unigram tag features"
         temp_word_tag_dict = {}
         word_1tags_list_dict = {}
         for sentece in list_of_sentences:
@@ -143,6 +150,7 @@ class feature_functions():
             w.writerow([key, val])           
 
     def extract_trigram_tag_with_word(self,d):
+        print "extracting contextual trigram tag..."
         self.frequent_word_tags_3gram_dict = self.sorted_word_tag_freq
         self.num_of_word_tag_3gram_features = len(self.frequent_word_tags_3gram_dict)
         return self.num_of_word_tag_3gram_features
@@ -233,7 +241,18 @@ class feature_functions():
             self.num_of_feature_func = self.num_of_morphological_bigram_features
         elif self.setup == "morphological_trigram":
             self.num_of_feature_func = self.num_of_morphological_trigram_features
-
+    #LIORA 
+    def curr_word_ends_with_suffix_func(self,suffix,tag,word):
+        if word.endswith(suffix) == True:
+            return 1
+        else:
+            return 0
+    def curr_word_starts_with_prefix_func(self,prefix,tag,word):
+        if word.startswith(prefix) == True:
+            return 1
+        else:
+            return 0
+    """
     def curr_prefix_ends_with_ing_func(self,tag,word):
         if word.endswith('ing') == True:
             return 1
@@ -264,6 +283,7 @@ class feature_functions():
         else:
             return 0
 
+   
     def get_morphological_trigram_index(self,t,t_1,t_2,word,setup):
         index = []
         if self.curr_prefix_ends_with_ing_func(t,word) == 1:
@@ -285,7 +305,59 @@ class feature_functions():
             index = [ind + self.num_of_morphological_unigram_features +\
                      self.num_of_morphological_bigram_features for ind in index]
         return index
-
+     """
+    #LIORA
+    def get_morphological_trigram_index(self,t,t_1,t_2,word,setup):
+        try:
+            index = []
+            for prefix in self.prefix_list:
+                if self.curr_word_starts_with_prefix_func(prefix, t, word):
+                    if self.morphological_trigram_features.has_key((prefix,t_2,t_1,t)):
+                        index.append(self.morphological_trigram_features[(prefix,t_2,t_1,t)])
+            for suffix in self.suffix_list:
+                if self.curr_word_ends_with_suffix_func(suffix, t, word):
+                    if self.morphological_trigram_features.has_key((suffix,t_2,t_1,t)):
+                        index.append(self.morphological_trigram_features[(suffix,t_2,t_1,t)])
+            return index
+        except Exception as err: 
+            sys.stderr.write("problem get_morphological_trigram_index:tag", t,"t_1:",t_1,"t_2:",t_2,"word",word)     
+            print err.args      
+            print err 
+        
+    def get_morphological_bigram_index(self,t,t_1,t_2,word,setup):
+        try:
+            index = []
+            for prefix in self.prefix_list:
+                if self.curr_word_starts_with_prefix_func(prefix, t, word):
+                    if self.morphological_bigram_features.has_key((prefix,t_1,t)):
+                        index.append(self.morphological_bigram_features[(prefix,t_1,t)])
+            for suffix in self.suffix_list:
+                if self.curr_word_ends_with_suffix_func(suffix, t, word):
+                    if self.morphological_bigram_features.has_key((suffix,t_1,t)):
+                        index.append(self.morphological_bigram_features[(suffix,t_1,t)])
+            return index
+        except Exception as err: 
+            sys.stderr.write("problem get_morphological_bigram_index:tag", t,"t_1:",t_1,"t_2:",t_2,"word",word)     
+            print err.args      
+            print err   
+    def get_morphological_unigram_index(self,t,t_1,t_2,word,setup):
+        try:
+            index = []
+            for prefix in self.prefix_list:
+                if self.curr_word_starts_with_prefix_func(prefix, t, word):
+                    if self.morphological_unigram_features.has_key((prefix,t)):
+                        index.append(self.morphological_unigram_features[(prefix,t)])
+            for suffix in self.suffix_list:
+                if self.curr_word_ends_with_suffix_func(suffix, t, word):
+                    if self.morphological_unigram_features.has_key((suffix,t)):
+                        index.append(self.morphological_unigram_features[(suffix,t)])
+            return index
+        except Exception as err: 
+            sys.stderr.write("problem get_morphological_unigram_index:tag", t,"t_1:",t_1,"t_2:",t_2,"word",word)     
+            print err.args      
+            print err      
+#LIORA
+    """
     def get_morphological_bigram_index(self,t,t_1,t_2,word,setup):
         index = []
         if self.curr_prefix_ends_with_ing_func(t,word)==1:
@@ -306,25 +378,8 @@ class feature_functions():
         if setup == "morphological_all": #divert the index
             index = [ind+self.num_of_morphological_unigram_features for ind in index]
         return index
-
-    def get_morphological_unigram_index(self,t,t_1,t_2,word,setup):
-        index = []
-        if self.curr_prefix_ends_with_ing_func(t,word)==1:
-            if self.morphological_unigram_features.has_key(("ing",t)):
-                index.append(self.morphological_unigram_features[("ing",t)])
-        if self.curr_prefix_starts_with_pre_func(t,word)==1:
-            if self.morphological_unigram_features.has_key(("pre",t)):
-                index.append(self.morphological_unigram_features[("pre",t)])
-        if self.curr_prefix_ends_with_ed_func(t,word) == 1:
-            if self.morphological_unigram_features.has_key(("ed",t)):
-                index.append(self.morphological_unigram_features[("ed",t)])
-        if self.curr_prefix_ends_with_s_func(t,word) == 1:
-            if self.morphological_unigram_features.has_key(("s",t)):
-                index.append(self.morphological_unigram_features[("s",t)])
-        if self.curr_prefix_ends_with_e_func(t,word) == 1:
-            if self.morphological_unigram_features.has_key(("e",t)):
-                index.append(self.morphological_unigram_features[("e",t)])
-        return index
+"""
+#LIORA
 
     def extract_morphological_features(self,d):
         word_tag_triple_cnt = 0
@@ -336,6 +391,20 @@ class feature_functions():
         sorted_morphological_unigram_features = {}
         for (word,triple_tags_list) in d.items():
             for tag,tag1,tag2 in triple_tags_list:
+                for prefix in self.prefix_list:
+                    if self.curr_word_starts_with_prefix_func(prefix, tag, word):
+                        freq_morphological_trigram_features[(prefix,tag,tag1,tag2)] = word_tag_triple_cnt
+                        freq_morphological_bigram_features[(prefix,tag,tag1)] = word_tag_triple_cnt
+                        freq_morphological_unigram_features[(prefix,tag)] = word_tag_triple_cnt
+                        word_tag_triple_cnt += 1
+                for suffix in self.suffix_list:
+                    if self.curr_word_ends_with_suffix_func(suffix, tag, word):
+                        freq_morphological_trigram_features[(suffix,tag,tag1,tag2)] = word_tag_triple_cnt
+                        freq_morphological_bigram_features[(suffix,tag,tag1)] = word_tag_triple_cnt
+                        freq_morphological_unigram_features[(suffix,tag)] = word_tag_triple_cnt
+                        word_tag_triple_cnt += 1
+                    
+                """
                 if self.curr_prefix_ends_with_ing_func(tag,word)==1:
                     freq_morphological_trigram_features[("ing",tag,tag1,tag2)] = word_tag_triple_cnt
                     freq_morphological_bigram_features[("ing",tag,tag1)] = word_tag_triple_cnt
@@ -361,6 +430,8 @@ class feature_functions():
                     freq_morphological_bigram_features[("e",tag,tag1)] = word_tag_triple_cnt
                     freq_morphological_unigram_features[("e",tag)] = word_tag_triple_cnt
                     word_tag_triple_cnt +=1
+                """
+                #LIORA
         sorted_morphological_trigram_features = OrderedDict(sorted(freq_morphological_trigram_features.items(), key= lambda x: (x[1])))
         sorted_morphological_bigram_features = OrderedDict(sorted(freq_morphological_bigram_features.items(), key= lambda x: (x[1])))
         sorted_morphological_unigram_features = OrderedDict(sorted(freq_morphological_unigram_features.items(), key= lambda x: (x[1])))
@@ -387,3 +458,23 @@ class feature_functions():
             filename = "features_dict_morphological_trigram_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.word_tag_threshold)
             self.num_of_morphological_trigram_features = len(self.morphological_trigram_features)
             self.save_to_pickle(self.morphological_trigram_features, filename)
+"""
+    def get_morphological_unigram_index(self,t,t_1,t_2,word,setup):
+        index = []
+        if self.curr_prefix_ends_with_ing_func(t,word)==1:
+            if self.morphological_unigram_features.has_key(("ing",t)):
+                index.append(self.morphological_unigram_features[("ing",t)])
+        if self.curr_prefix_starts_with_pre_func(t,word)==1:
+            if self.morphological_unigram_features.has_key(("pre",t)):
+                index.append(self.morphological_unigram_features[("pre",t)])
+        if self.curr_prefix_ends_with_ed_func(t,word) == 1:
+            if self.morphological_unigram_features.has_key(("ed",t)):
+                index.append(self.morphological_unigram_features[("ed",t)])
+        if self.curr_prefix_ends_with_s_func(t,word) == 1:
+            if self.morphological_unigram_features.has_key(("s",t)):
+                index.append(self.morphological_unigram_features[("s",t)])
+        if self.curr_prefix_ends_with_e_func(t,word) == 1:
+            if self.morphological_unigram_features.has_key(("e",t)):
+                index.append(self.morphological_unigram_features[("e",t)])
+        return index
+"""

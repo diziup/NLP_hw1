@@ -313,8 +313,9 @@ class MEMM():
                 self.feature_functions.apply_word_tags_features(self.frequent_word_tags_list_dict,self.train_sentences_list)
                 self.num_of_feature_functions = self.feature_functions.num_of_feature_func
             elif "morphological" in self.setup:
-                self.feature_functions.apply_set2_features(self.frequent_word_tag_pairs_dict)
-            
+                self.feature_functions.apply_morphological_word_tags_features(self.frequent_word_tags_list_dict)
+                self.num_of_feature_functions = self.feature_functions.num_of_feature_func 
+                
             t2 = time.clock()
             print "finished applying ",self.num_of_feature_functions," in", t2 - t1
         except Exception as err: 
@@ -445,13 +446,14 @@ class MEMM():
                     for tag in self.seen_tags_set:
                         #according to the setup, get the indices of the "on" features for the current x.
                         inner_product = 0
-                        curr_indices = [] = []
+                        curr_indices = [] 
                         if self.setup == "smoothing_contextual":
                             for func in self.get_indices_function_dict["contextual_unigram"]:
                                 curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
                         elif self.setup == "smoothing_morphological":
                             for func in self.get_indices_function_dict["morphological_unigram"]:
                                 curr_indices.extend(func(tag,tag_minus_1,tag_minus_2,sentence.get_word(word_index),self.setup))
+                        
                         all_tag_feature_vec_indices_unigram[tag] = curr_indices
                         for feature_index in all_tag_feature_vec_indices_unigram[tag]:                                                  
                             if self.setup == "smoothing_contextual": 
@@ -517,6 +519,8 @@ class MEMM():
             if self.setup == "linear_inter":
                 self.compute_q_prob_for_viterbi_linear_interpolation_setup(sentence,word_index)
             elif self.setup == "smoothing_contextual":
+                self.compute_q_prob_for_viterbi_smoothing_setup(sentence,word_index)
+            elif self.setup == "smoothing_morphological":
                 self.compute_q_prob_for_viterbi_smoothing_setup(sentence,word_index)
             else:
                 self.compute_q_prob_for_viterbi_single_features_set_setup(sentence,word_index)            
@@ -640,16 +644,17 @@ class MEMM():
         self.test_tags_results = cPickle.load( open("test_tags_results_"+self.setup+"_reg_lambda_"+str(self.regularization_lambda)+"_threshold_"+str(self.word_tag_threshold), "rb" ) )
         self.read_input_sentences_and_tags_for_test()
         #compare each sentence length of tags -  gold and predicted
-        diff_len_sen_index = []
-        for sentence_index in range(0,len(self.test_tags_results)):
-            if len(self.test_tags_results[sentence_index]) != self.test_sentences_list[sentence_index].length:
-                diff_len_sen_index.append(sentence_index)
-        if len(diff_len_sen_index) > 0:
-            print diff_len_sen_index     
-        else:
-            print "no diff len sentence"
+#         diff_len    _sen_index = []
+#         for sentence_index in range(0,len(self.test_tags_results)):
+#             if len(self.test_tags_results[sentence_index]) != self.test_sentences_list[sentence_index].length:
+#                 diff_len_sen_index.append(sentence_index)
+#         if len(diff_len_sen_index) > 0:
+#             print diff_len_sen_index     
+#         else:
+#             print "no diff len sentence"
     
     def analyze_results(self):
+        self.read_input_sentences_and_tags_for_test()
         num_of_tags = 0
         tags_results = {}
         real_tag_list = []
@@ -671,11 +676,16 @@ class MEMM():
                 num_of_tags +=1
                 pred_tag_list.append(predict_tag)
         #calc TP and FN
-        for real_tag in range(0,len(real_tag_list)):
-            if(real_tag_list[real_tag]==pred_tag_list[real_tag]):
-                tags_results[real_tag_list[real_tag]]["TP"]+=1
-            else:
-                tags_results[real_tag_list[real_tag]]["FN"]+=1
+        try:
+            for real_tag in range(0,len(real_tag_list)):
+                if(real_tag_list[real_tag] == pred_tag_list[real_tag]):
+                    tags_results[real_tag_list[real_tag]]["TP"]+=1
+                else:
+                    tags_results[real_tag_list[real_tag]]["FN"]+=1
+        except Exception as err: 
+            sys.stderr.write("problem analyze_results, real_tag:",real_tag)     
+            print err.args      
+            print err
         #calc FP
         for pred_tag in range(0,len(pred_tag_list)):
             if(real_tag_list[pred_tag]!=pred_tag_list[pred_tag]):
@@ -693,3 +703,4 @@ class MEMM():
         self.precision =(self.total_TP)/(self.total_TP+self.total_FP)
         self.F_measure = 2*(self.recall*self.precision)/(self.recall+self.precision)
         self.tags_results = tags_results
+        print "accuracy:", self.accuracy, "recall:",self.recall,"precision:",self.precision,"F:",self.F_measure
