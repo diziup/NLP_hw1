@@ -19,11 +19,11 @@ class MEMM():
         
         self.num_of_feature_functions = 0
         self.tuple_probabilities_dict = {}
-        self.data_path = r"C:\study\technion\MSc\3rd_semester\NLP\hw1\sec2-21"
-        self.input_sentence_file = self.data_path+r"\sec2-21.words" 
-        self.input_tags_file = self.data_path+r"\sec2-21.pos"
-#         self.input_tags_file = r"../data/sec2-21/sec2-21.pos"
-#         self.input_sentence_file = r"../data/sec2-21/sec2-21.words" 
+#         self.data_path = r"C:\study\technion\MSc\3rd_semester\NLP\hw1\sec2-21"
+#         self.input_sentence_file = self.data_path+r"\sec2-21.words" 
+#         self.input_tags_file = self.data_path+r"\sec2-21.pos"
+        self.input_tags_file = r"../data/sec2-21/sec2-21.pos"
+        self.input_sentence_file = r"../data/sec2-21/sec2-21.words" 
         self.seen_tags_set = []
         self.regularization_lambda = reg_lambda
         self.num_of_sentences = num_of_sentence
