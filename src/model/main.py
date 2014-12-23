@@ -11,7 +11,7 @@ try:
     t_start = time.clock()
     setup = "linear_inter"
     num_of_sentences = 5000
-    reg_lambda = 2
+    reg_lambda = 0.2
     threshold = 14 # context'- unigram 7, bigram 7, trigram 6, all - 15. morph:uni - 0, bi - 4, tri -8 
     MEMM_model = MEMM.MEMM(setup, num_of_sentences, reg_lambda, threshold)
 #     MEMM_model.train_memm()
