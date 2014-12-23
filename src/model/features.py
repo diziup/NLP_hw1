@@ -66,6 +66,9 @@ class feature_functions():
         self.contextual_unigram_threshold = 7
         self.contextual_bigram_threshold = 7
         self.contextual_trigram_threshold = 6 
+        self.morphological_unigram_threshold = 0
+        self.morphological_bigram_threshold = 4
+        self.morphological_trigram_threshold = 8
 #     2. word_tag setup  - Set of contextual Features + current word
 
     def extract_word_tag_features(self,d):
@@ -196,7 +199,13 @@ class feature_functions():
             self.feature_tag_bigram = cPickle.load( open( "features_dict_contextual_bigram_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.contextual_bigram_threshold), "rb" ) )    
         if self.setup == "contextual_trigram" or self.setup == "contextual_all" or self.setup == "smoothing_contextual" or self.setup == "linear_inter": 
             self.feature_tag_trigram = cPickle.load( open( "features_dict_contextual_trigram_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.contextual_trigram_threshold), "rb" ) )
-                         
+        if self.setup == "morphological_unigram" or self.setup == "morphological_all" or self.setup == "smoothing_morphological" or self.setup == "linear_inter": 
+            self.morphological_unigram_features = cPickle.load( open( "features_dict_morphological_unigram_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.morphological_unigram_threshold), "rb" ) )
+        if self.setup == "morphological_bigram" or self.setup == "morphological_all" or self.setup == "smoothing_morphological" or self.setup == "linear_inter": 
+            self.morphological_bigram_features =  cPickle.load( open( "features_dict_morphological_bigram_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.morphological_bigram_threshold), "rb" ) )
+        if self.setup == "morphological_trigram" or self.setup == "morphological_all" or self.setup == "smoothing_morphological" or self.setup == "linear_inter": 
+            self.morphological_trigram_features =  cPickle.load( open( "features_dict_morphological_trigram_sen_num_"+str(self.num_of_sentences)+"_threshold_"+str(self.morphological_trigram_threshold), "rb" ) )                                                        
+                                                                                                                  
     def apply_word_tags_features(self,d,list_of_sentences):
         self.extract_word_tag_features(d)
         
